@@ -1,9 +1,16 @@
+#include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 
+
 #include "uszram.h"
 
-#define BLK_PER_PG (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT))
+
+#define BLK_PER_PG (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)) // Power of 2
+
+/* Use a trick to correctly make PAGE_COUNT the ceiling of
+ * USZRAM_BLOCK_COUNT / BLK_PER_PG; similar for LOCK_COUNT
+ */
 #define PAGE_COUNT (USZRAM_BLOCK_COUNT / BLK_PER_PG	\
 		    + (USZRAM_BLOCK_COUNT % BLK_PER_PG != 0))
 #define LOCK_COUNT (PAGE_COUNT / USZRAM_PG_PER_LOCK	\
@@ -15,11 +22,13 @@
  * can squeeze size and flags into a field."
  */
 #define FLAG_SHIFT 28
+#define GET_SIZE(pg) (pg->flags & ((1 << FLAG_SHIFT) - 1))
 
 // Flags for uszram pages (pgtbl[page_no].flags)
 enum uszram_pgflags {
 	HUGE_PAGE = FLAG_SHIFT,	// Incompressible page
 };
+
 
 struct uszram_page {
 	char *data;
@@ -56,21 +65,28 @@ static struct uszram {
 	/* _Bool claim; // Protected by bdev->bd_mutex */
 } uszram;
 
+int uszram_init(void)
+{
+	return 0;
+}
+
 int uszram_read_blk(unsigned long blk_addr, char data[static USZRAM_BLOCK_SIZE])
 {
 	if (blk_addr >= USZRAM_BLOCK_COUNT)
 		return -1;
 
 	unsigned long pg_addr = blk_addr / BLK_PER_PG;
+	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	unsigned long byte_offset
 		= blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
 	struct uszram_page *pg = uszram.pgtbl + pg_addr;
-	unsigned long pg_size = pg->flags & ((1 << FLAG_SHIFT) - 1);
 	char pg_buf[USZRAM_PAGE_SIZE];
 
-	int ret = LZ4_decompress_safe_partial(pg->data, pg_buf, pg_size,
+	// Lock uszram.locks[lock_addr] as reader
+	int ret = LZ4_decompress_safe_partial(pg->data, pg_buf, GET_SIZE(pg),
 					      byte_offset + USZRAM_BLOCK_SIZE,
 					      USZRAM_PAGE_SIZE);
+	// Unlock uszram.locks[lock_addr] as reader
 	ret -= byte_offset;
 	if (ret < 0)
 		return ret;
@@ -80,10 +96,21 @@ int uszram_read_blk(unsigned long blk_addr, char data[static USZRAM_BLOCK_SIZE])
 
 int uszram_read_pg(unsigned long pg_addr, char data[static USZRAM_PAGE_SIZE])
 {
-	// Full LZ4 decompress
+	if (pg_addr >= PAGE_COUNT)
+		return -1;
+
+	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
+	struct uszram_page *pg = uszram.pgtbl + pg_addr;
+
+	// Lock uszram.locks[lock_addr] as reader
+	int ret = LZ4_decompress_safe(pg->data, data, GET_SIZE(pg),
+				      USZRAM_PAGE_SIZE);
+	// Unlock uszram.locks[lock_addr] as reader
+	return ret;
 }
 
-int uszram_write_blk(unsigned long blk_addr, const char data[static USZRAM_BLOCK_SIZE])
+int uszram_write_blk(unsigned long blk_addr,
+		     const char data[static USZRAM_BLOCK_SIZE])
 {
 	if (blk_addr >= USZRAM_BLOCK_COUNT)
 		return -1;
@@ -100,7 +127,33 @@ int uszram_write_blk(unsigned long blk_addr, const char data[static USZRAM_BLOCK
 	return uszram_write_pg(pg_addr, pg_buf);
 }
 
-int uszram_write_pg(unsigned long pg_addr, const char data[static USZRAM_PAGE_SIZE])
+int uszram_write_pg(unsigned long pg_addr,
+		    const char data[static USZRAM_PAGE_SIZE])
 {
-	// Full LZ4 compress
+	if (pg_addr >= PAGE_COUNT)
+		return -1;
+
+	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
+	struct uszram_page *pg = uszram.pgtbl + pg_addr;
+	_Bool present = pg->data, huge;
+	unsigned long size = GET_SIZE(pg);
+	char pg_buf[USZRAM_PAGE_SIZE];
+
+	unsigned new_size = LZ4_compress_default(data, pg_buf,
+						 USZRAM_PAGE_SIZE,
+						 USZRAM_PAGE_SIZE);
+	// Lock uszram.locks[lock_addr] as writer
+	if (new_size == 0) {
+		new_size = USZRAM_PAGE_SIZE;
+		pg->flags |= 1 << HUGE_PAGE;
+		huge = 1;
+	}
+	if (!present || new_size != size) {
+		if (present)
+			free(pg->data);
+		pg->data = malloc(new_size);
+	}
+	memcpy(pg->data, huge ? data : pg_buf, new_size);
+	// Unlock uszram.locks[lock_addr] as writer
+	return new_size;
 }
