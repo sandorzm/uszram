@@ -2,26 +2,21 @@
 #include <string.h>
 #include <threads.h>
 
+#include "lz4.h"
 
 #include "uszram.h"
 
 
-#define BLK_PER_PG (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)) // Power of 2
-
-/* Use a trick to correctly make PAGE_COUNT the ceiling of
- * USZRAM_BLOCK_COUNT / BLK_PER_PG; similar for LOCK_COUNT
- */
-#define PAGE_COUNT (USZRAM_BLOCK_COUNT / BLK_PER_PG	\
-		    + (USZRAM_BLOCK_COUNT % BLK_PER_PG != 0))
-#define LOCK_COUNT (PAGE_COUNT / USZRAM_PG_PER_LOCK	\
-		    + (PAGE_COUNT % USZRAM_PG_PER_LOCK != 0))
+#define BLK_PER_PG  (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)) // Power of 2
+#define PG_ADDR_MAX (USZRAM_BLK_ADDR_MAX / BLK_PER_PG)
+#define LOCK_COUNT  (PG_ADDR_MAX / USZRAM_PG_PER_LOCK + 1)
 
 /* The lower FLAG_SHIFT bits of pgtbl[page_no].flags are for compressed size;
  * the higher bits are for zram_pageflags. From zram source: "zram is mainly
  * used for memory efficiency so we want to keep memory footprint small so we
  * can squeeze size and flags into a field."
  */
-#define FLAG_SHIFT 28
+#define FLAG_SHIFT  28
 #define GET_SIZE(pg) (pg->flags & ((1 << FLAG_SHIFT) - 1))
 
 // Flags for uszram pages (pgtbl[page_no].flags)
@@ -32,7 +27,7 @@ enum uszram_pgflags {
 
 struct uszram_page {
 	char *data;
-	unsigned long flags;
+	int_least32_t flags;
 };
 
 struct uszram_stats {
@@ -52,7 +47,7 @@ struct uszram_stats {
 };
 
 static struct uszram {
-	struct uszram_page pgtbl[PAGE_COUNT];
+	struct uszram_page pgtbl[PG_ADDR_MAX + 1];
 	mtx_t locks[LOCK_COUNT];
 	struct uszram_stats stats;
 
@@ -70,12 +65,12 @@ int uszram_init(void)
 	return 0;
 }
 
-int uszram_read_blk(unsigned long blk_addr, char data[static USZRAM_BLOCK_SIZE])
+int uszram_read_blk(int_least32_t blk_addr, char data[static USZRAM_BLOCK_SIZE])
 {
-	if (blk_addr >= USZRAM_BLOCK_COUNT)
+	if (blk_addr > USZRAM_BLK_ADDR_MAX)
 		return -1;
 
-	unsigned long pg_addr = blk_addr / BLK_PER_PG;
+	int_least32_t pg_addr = blk_addr / BLK_PER_PG;
 	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	unsigned long byte_offset
 		= blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
@@ -94,9 +89,9 @@ int uszram_read_blk(unsigned long blk_addr, char data[static USZRAM_BLOCK_SIZE])
 	return ret;
 }
 
-int uszram_read_pg(unsigned long pg_addr, char data[static USZRAM_PAGE_SIZE])
+int uszram_read_pg(int_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 {
-	if (pg_addr >= PAGE_COUNT)
+	if (pg_addr > PG_ADDR_MAX)
 		return -1;
 
 	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
@@ -109,10 +104,10 @@ int uszram_read_pg(unsigned long pg_addr, char data[static USZRAM_PAGE_SIZE])
 	return ret;
 }
 
-int uszram_write_blk(unsigned long blk_addr,
+int uszram_write_blk(int_least32_t blk_addr,
 		     const char data[static USZRAM_BLOCK_SIZE])
 {
-	if (blk_addr >= USZRAM_BLOCK_COUNT)
+	if (blk_addr > USZRAM_BLK_ADDR_MAX)
 		return -1;
 
 	unsigned long pg_addr = blk_addr / BLK_PER_PG;
@@ -127,26 +122,27 @@ int uszram_write_blk(unsigned long blk_addr,
 	return uszram_write_pg(pg_addr, pg_buf);
 }
 
-int uszram_write_pg(unsigned long pg_addr,
+int uszram_write_pg(int_least32_t pg_addr,
 		    const char data[static USZRAM_PAGE_SIZE])
 {
-	if (pg_addr >= PAGE_COUNT)
+	if (pg_addr > PG_ADDR_MAX)
 		return -1;
 
 	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	struct uszram_page *pg = uszram.pgtbl + pg_addr;
-	_Bool present = pg->data, huge;
-	unsigned long size = GET_SIZE(pg);
+	_Bool present = pg->data, huge = 0;
+	int size = GET_SIZE(pg);
 	char pg_buf[USZRAM_PAGE_SIZE];
 
-	unsigned new_size = LZ4_compress_default(data, pg_buf,
-						 USZRAM_PAGE_SIZE,
-						 USZRAM_PAGE_SIZE);
+	int new_size = LZ4_compress_default(data, pg_buf, USZRAM_PAGE_SIZE,
+					    USZRAM_PAGE_SIZE);
 	// Lock uszram.locks[lock_addr] as writer
 	if (new_size == 0) {
 		new_size = USZRAM_PAGE_SIZE;
 		pg->flags |= 1 << HUGE_PAGE;
 		huge = 1;
+	} else {
+		pg->flags = new_size;
 	}
 	if (!present || new_size != size) {
 		if (present)
