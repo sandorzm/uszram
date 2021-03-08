@@ -7,7 +7,8 @@
 #include "uszram.h"
 
 
-#define BLK_PER_PG  (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)) // Power of 2
+#define BLK_PER_PG  ((uint_least32_t)1		\
+		     << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT))
 #define PG_ADDR_MAX (USZRAM_BLK_ADDR_MAX / BLK_PER_PG)
 #define LOCK_COUNT  (PG_ADDR_MAX / USZRAM_PG_PER_LOCK + 1)
 
@@ -17,7 +18,8 @@
  * can squeeze size and flags into a field."
  */
 #define FLAG_SHIFT 28
-#define GET_SIZE(pg) (pg->flags & (((uint_least32_t)1 << FLAG_SHIFT) - 1))
+#define GET_SIZE(pg) ((int)(pg->flags		\
+			    & (((uint_least32_t)1 << FLAG_SHIFT) - 1)))
 
 // Flags for uszram pages (pgtbl[page_no].flags)
 enum uszram_pgflags {
@@ -47,6 +49,34 @@ static struct uszram {
 	mtx_t locks[LOCK_COUNT];
 	struct uszram_stats stats;
 } uszram;
+
+inline static int write_no_comp(struct uszram_page *pg, const char *pg_buf,
+				const char *comp_buf, int comp_size)
+{
+	if (comp_size) {
+		pg->flags = comp_size;
+	} else {
+		pg->flags |= (uint_least32_t)1 << HUGE_PAGE;
+		comp_size = USZRAM_PAGE_SIZE;
+		comp_buf = pg_buf;
+	}
+	if (!(pg->data && comp_size == GET_SIZE(pg))) {
+		free(pg->data);
+		pg->data = calloc(comp_size, 1);
+	}
+	memcpy(pg->data, comp_buf, comp_size);
+	return comp_size;
+}
+
+inline static int modify_and_write(struct uszram_page *pg, char *pg_buf,
+				   int byte_offset, const char *data,
+				   char *comp_buf)
+{
+	memcpy(pg_buf + byte_offset, data, USZRAM_BLOCK_SIZE);
+	int new_size = LZ4_compress_default(pg_buf, comp_buf, USZRAM_PAGE_SIZE,
+					    USZRAM_PAGE_SIZE);
+	return write_no_comp(pg, pg_buf, comp_buf, new_size);
+}
 
 int uszram_init(void)
 {
@@ -96,6 +126,9 @@ int uszram_read_pg(uint_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 	if (pg_addr > PG_ADDR_MAX)
 		return -1;
 
+	/* May want to replace everything below with a call to read_pg_no_lock
+	 * wrapped in lock-unlock calls
+	 */
 	struct uszram_page *pg = uszram.pgtbl + pg_addr;
 
 	// TODO Lock needed? Should uszram_page fields be _Atomic?
@@ -104,7 +137,7 @@ int uszram_read_pg(uint_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 		return 0;
 	}
 
-	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
+	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 
 	// Lock uszram.locks[lock_addr] as reader
 	if (pg->flags & ((uint_least32_t)1 << HUGE_PAGE)) {
@@ -126,16 +159,30 @@ int uszram_write_blk(uint_least32_t blk_addr,
 	if (blk_addr > USZRAM_BLK_ADDR_MAX)
 		return -1;
 
-	unsigned long pg_addr = blk_addr / BLK_PER_PG;
-	unsigned long byte_offset
-		= blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
-	char pg_buf[USZRAM_PAGE_SIZE];
+	uint_least32_t pg_addr = blk_addr / BLK_PER_PG;
+	struct uszram_page *pg = uszram.pgtbl + pg_addr;
 
-	int ret = uszram_read_pg(pg_addr, pg_buf);
-	if (ret < 0)
-		return ret;
-	memcpy(pg_buf + byte_offset, data, USZRAM_BLOCK_SIZE);
-	return uszram_write_pg(pg_addr, pg_buf);
+	uint_least32_t lock_addr = pg_addr/USZRAM_PG_PER_LOCK;
+	int byte_offset = blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
+	int new_size;
+	char comp_buf[USZRAM_PAGE_SIZE];
+
+	// Lock uszram.pgtbl[lock_addr] as writer
+	if (pg->flags & ((uint_least32_t)1 << HUGE_PAGE)) {
+		new_size = modify_and_write(pg, pg->data, byte_offset, data,
+					    comp_buf);
+	} else {
+		char pg_buf[USZRAM_PAGE_SIZE];
+		new_size = LZ4_decompress_safe(pg->data, pg_buf, GET_SIZE(pg),
+					       USZRAM_PAGE_SIZE);
+		if (new_size < 0) {
+			// Unlock uszram.pgtbl[lock_addr] as writer
+			return new_size;
+		}
+		new_size = modify_and_write(pg, pg_buf, byte_offset, data,
+					    comp_buf);
+	}
+	return new_size;
 }
 
 int uszram_write_pg(uint_least32_t pg_addr,
@@ -145,26 +192,13 @@ int uszram_write_pg(uint_least32_t pg_addr,
 		return -1;
 
 	struct uszram_page *pg = uszram.pgtbl + pg_addr;
-	int size = GET_SIZE(pg);
-	unsigned long lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
-	char pg_buf[USZRAM_PAGE_SIZE];
-	const char *data_src = pg_buf;
+	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
+	char comp_buf[USZRAM_PAGE_SIZE];
 
-	int new_size = LZ4_compress_default(data, pg_buf, USZRAM_PAGE_SIZE,
+	int new_size = LZ4_compress_default(data, comp_buf, USZRAM_PAGE_SIZE,
 					    USZRAM_PAGE_SIZE);
 	// Lock uszram.locks[lock_addr] as writer
-	if (new_size) {
-		pg->flags = new_size;
-	} else {
-		pg->flags |= (uint_least32_t)1 << HUGE_PAGE;
-		new_size = USZRAM_PAGE_SIZE;
-		data_src = data;
-	}
-	if (!(pg->data && new_size == size)) {
-		free(pg->data);
-		pg->data = calloc(new_size, 1);
-	}
-	memcpy(pg->data, data_src, new_size);
+	new_size = write_no_comp(pg, data, comp_buf, new_size);
 	// Unlock uszram.locks[lock_addr] as writer
 	return new_size;
 }
