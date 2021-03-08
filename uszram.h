@@ -28,6 +28,12 @@
 #define USZRAM_PAGE_SHIFT   12
 #define USZRAM_PG_PER_LOCK   2
 
+
+/* Don't change any of the following lines.
+ *
+ * No casting needed here because block and page sizes are guaranteed by the
+ * specifications above to fit into an int.
+ */
 #define USZRAM_BLOCK_SIZE (1 << USZRAM_BLOCK_SHIFT)
 #define USZRAM_PAGE_SIZE  (1 << USZRAM_PAGE_SHIFT)
 
