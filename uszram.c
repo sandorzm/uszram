@@ -52,17 +52,17 @@ static struct uszram {
 inline static int write_no_comp(struct uszram_page *pg, const char *raw_pg,
 				const char *compr_pg, int compr_size)
 {
-	if (compr_size) {
+	if (!compr_size) {
+		compr_size = USZRAM_PAGE_SIZE;
+		if (pg->flags & ((uint_least32_t)1 << HUGE_PAGE))
+			goto out;
+		pg->flags |= (uint_least32_t)1 << HUGE_PAGE;
+		compr_pg = raw_pg;
+	} else {
 		if (!(pg->flags & ((uint_least32_t)1 << HUGE_PAGE))
 		    && compr_size == GET_PG_SIZE(pg))
 			goto out_cpy;
 		pg->flags = compr_size;
-	} else {
-		if (pg->flags & ((uint_least32_t)1 << HUGE_PAGE))
-			goto out;
-		pg->flags |= (uint_least32_t)1 << HUGE_PAGE;
-		compr_size = USZRAM_PAGE_SIZE;
-		compr_pg = raw_pg;
 	}
 	free(pg->data);
 	pg->data = calloc(compr_size, 1);
