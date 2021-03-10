@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 
-/* Change the next 4 definitions to configure the data store.
+/* Change the next 4 definitions to configure block size and locking.
  *
  * Logical block size, the smallest unit that can be read or written, is
  * (1 << USZRAM_BLOCK_SHIFT) bytes. USZRAM_BLOCK_SHIFT must be at least 0 and at
@@ -28,6 +28,23 @@
 #define USZRAM_PAGE_SHIFT   12
 #define USZRAM_PG_PER_LOCK   2
 
+/* Change the next 3 definitions to configure the memory allocator.
+ *
+ * Change the first defined symbol to select the memory allocator:
+ * - The symbol USZRAM_MALLOC selects the basic allocator with standard malloc
+ *   (allocators/basic-malloc.c)
+ * - USZRAM_JEMALLOC selects the basic allocator with jemalloc
+ *   (allocators/basic-malloc.c). Requires a jemalloc development library.
+ *
+ * USZRAM_SLAB_MIN is the number of bytes in the smallest slab class to be used
+ * in slab allocation. It must be at least 1 and at most USZRAM_PAGE_SIZE.
+ *
+ * The slab size classes used by the allocator are from USZRAM_SLAB_MIN up to
+ * USZRAM_PAGE_SIZE in increments of USZRAM_SLAB_INCR bytes.
+ */
+#define USZRAM_JEMALLOC
+#define USZRAM_SLAB_MIN  256
+#define USZRAM_SLAB_INCR 256
 
 /* Don't change any of the following lines.
  *
