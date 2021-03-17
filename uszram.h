@@ -28,23 +28,21 @@
 #define USZRAM_PAGE_SHIFT   12
 #define USZRAM_PG_PER_LOCK   2
 
-/* Change the next 3 definitions to configure the memory allocator.
+/* Change the next 2 defined symbols to configure the memory allocator and
+ * compressor.
  *
- * Change the first defined symbol to select the memory allocator:
- * - The symbol USZRAM_MALLOC selects the basic allocator with standard malloc
- *   (allocators/basic-malloc.c)
- * - USZRAM_JEMALLOC selects the basic allocator with jemalloc
- *   (allocators/basic-malloc.c). Requires a jemalloc development library.
+ * The first definition sets the memory allocation engine:
+ * - USZRAM_MALLOC selects standard malloc
+ * - USZRAM_JEMALLOC selects jemalloc
  *
- * USZRAM_SLAB_MIN is the number of bytes in the smallest slab class to be used
- * in slab allocation. It must be at least 1 and at most USZRAM_PAGE_SIZE.
- *
- * The slab size classes used by the allocator are from USZRAM_SLAB_MIN up to
- * USZRAM_PAGE_SIZE in increments of USZRAM_SLAB_INCR bytes.
+ * The second definition sets the compression library:
+ * - USZRAM_LZ4 selects plain LZ4
+ * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
+ *   compression work as much as possible and thus increase speed
  */
 #define USZRAM_JEMALLOC
-#define USZRAM_SLAB_MIN  256
-#define USZRAM_SLAB_INCR 256
+#define USZRAM_ZAPI
+
 
 /* Don't change any of the following lines.
  *
