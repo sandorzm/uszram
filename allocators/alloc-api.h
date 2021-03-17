@@ -1,5 +1,5 @@
-#ifndef ALLOC_H
-#define ALLOC_H
+#ifndef ALLOC_API_H
+#define ALLOC_API_H
 
 
 #include <stddef.h>
@@ -16,4 +16,4 @@
 static char *maybe_realloc(char *data, int data_size, int new_size);
 
 
-#endif // ALLOC_H
+#endif // ALLOC_API_H

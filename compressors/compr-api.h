@@ -1,5 +1,5 @@
-#ifndef COMPR_H
-#define COMPR_H
+#ifndef COMPR_API_H
+#define COMPR_API_H
 
 
 #include "../uszram-private.h"
@@ -18,4 +18,4 @@ static int decompress(struct page *pg, char *dest, int bytes);
 static int update_blk(struct page *pg, char *new_blk, int offset);
 
 
-#endif // COMPR_H
+#endif // COMPR_API_H
