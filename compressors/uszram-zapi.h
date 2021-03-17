@@ -2,13 +2,9 @@
 #define ZAPI_ALLOC_H
 
 
-#include "compr.h"
+#include "compr-api.h"
 // #include "zapi.h"
 
-
-struct page {
-	char *zapi_data;
-};
 
 inline static int get_size(struct page *pg)
 {

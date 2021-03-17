@@ -1,0 +1,8 @@
+#ifndef USZRAM_ZAPI_DEF_H
+#define USZRAM_ZAPI_DEF_H
+
+
+#define NO_COMPR_METADATA
+
+
+#endif // USZRAM_ZAPI_DEF_H

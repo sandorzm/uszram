@@ -9,8 +9,6 @@
 #  include "compressors/uszram-zapi.h"
 #endif
 
-#include "allocators/uszram-basic.h"
-
 
 struct stats {
 	uint_least64_t compr_data_size;		// compressed size of pages stored

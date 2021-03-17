@@ -2,8 +2,6 @@
 #define ALLOC_API_H
 
 
-#include <stddef.h>
-
 #ifdef USZRAM_JEMALLOC
 #  include <jemalloc/jemalloc.h>
 #else
@@ -13,7 +11,7 @@
 #include "../uszram-private.h"
 
 
-static char *maybe_realloc(char *data, int data_size, int new_size);
+static void maybe_realloc(struct page *pg, int old_size, int new_size);
 
 
 #endif // ALLOC_API_H

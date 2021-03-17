@@ -1,0 +1,8 @@
+#ifndef USZRAM_BASIC_DEF_H
+#define USZRAM_BASIC_DEF_H
+
+
+#define NO_ALLOC_METADATA
+
+
+#endif // USZRAM_BASIC_DEF_H

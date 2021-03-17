@@ -5,10 +5,7 @@
 #include "../uszram-private.h"
 
 
-struct page;
-
 inline static int   get_size(struct page *pg);
-inline static char *get_alloc(struct page *pg);
 inline static char *get_raw(struct page *pg);
 
 // inline static void set_size

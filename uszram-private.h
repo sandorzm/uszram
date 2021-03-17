@@ -2,12 +2,28 @@
 #define USZRAM_PRIVATE_H
 
 
-#include "uszram.h"
+#include "uszram-private-def.h"
+
+#ifdef USZRAM_BASIC
+#  include "allocators/uszram-basic-def.h"
+#endif
+
+#ifdef USZRAM_LZ4
+#  include "compressors/uszram-lz4-def.h"
+#else
+#  include "compressors/uszram-zapi-def.h"
+#endif
 
 
-#define BLK_PER_PG    (1 << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT))
-#define PG_ADDR_MAX   (USZRAM_BLK_ADDR_MAX / BLK_PER_PG)
-#define LOCK_ADDR_MAX (PG_ADDR_MAX / USZRAM_PG_PER_LOCK)
+struct page {
+	char *_Atomic data;
+#ifndef NO_ALLOC_METADATA
+	struct alloc_data alloc_data;
+#endif
+#ifndef NO_COMPR_METADATA
+	struct compr_data compr_data;
+#endif
+};
 
 
 #endif // USZRAM_PRIVATE_H

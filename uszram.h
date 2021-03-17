@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 
-/* Change the next 4 definitions to configure block size and locking.
+/* Change the next 4 definitions to configure data sizes and locking.
  *
  * Logical block size, the smallest unit that can be read or written, is
  * (1 << USZRAM_BLOCK_SHIFT) bytes. USZRAM_BLOCK_SHIFT must be at least 0 and at
@@ -28,19 +28,23 @@
 #define USZRAM_PAGE_SHIFT   12
 #define USZRAM_PG_PER_LOCK   2
 
-/* Change the next 2 defined symbols to configure the memory allocator and
+/* Change the next 3 defined symbols to configure the memory allocator and
  * compressor.
  *
  * The first definition sets the memory allocation engine:
  * - USZRAM_MALLOC selects standard malloc
  * - USZRAM_JEMALLOC selects jemalloc
  *
- * The second definition sets the compression library:
+ * The second definition sets the memory allocation strategy:
+ * - USZRAM_BASIC selects a basic strategy
+ *
+ * The third definition sets the compression library:
  * - USZRAM_LZ4 selects plain LZ4
  * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
  *   compression work as much as possible and thus increase speed
  */
 #define USZRAM_JEMALLOC
+#define USZRAM_BASIC
 #define USZRAM_ZAPI
 
 

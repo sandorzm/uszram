@@ -2,16 +2,15 @@
 #define USZRAM_BASIC_H
 
 
-#include "alloc.h"
+#include "alloc-api.h"
 
 
-static char *maybe_realloc(char *data, int data_size, int new_size)
+static void maybe_realloc(struct page *pg, int old_size, int new_size)
 {
-	if (data == NULL || data_size != new_size) {
-		free(data);
-		return calloc(new_size, 1);
+	if (pg->data == NULL || old_size != new_size) {
+		free(pg->data);
+		pg->data = calloc(new_size, 1);
 	}
-	return data;
 }
 
 
