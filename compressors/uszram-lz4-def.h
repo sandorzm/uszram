@@ -2,11 +2,11 @@
 #define USZRAM_LZ4_DEF_H
 
 
-#include "../uszram-private-def.h"
+#include "../uszram-def.h"
 
 
 struct compr_data {
-	size_type flags;
+	size_type size;
 };
 
 

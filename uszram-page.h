@@ -2,7 +2,7 @@
 #define USZRAM_PRIVATE_H
 
 
-#include "uszram-private-def.h"
+#include "uszram-def.h"
 
 #ifdef USZRAM_BASIC
 #  include "allocators/uszram-basic-def.h"

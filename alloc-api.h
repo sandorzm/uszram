@@ -8,10 +8,10 @@
 #  include <stdlib.h>
 #endif
 
-#include "../uszram-private.h"
+#include "uszram-page.h"
 
 
-static void maybe_realloc(struct page *pg, int old_size, int new_size);
+static void maybe_reallocate(struct page *pg, int old_size, int new_size);
 
 
 #endif // ALLOC_API_H

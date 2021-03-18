@@ -68,19 +68,18 @@ int uszram_read_blk(uint_least32_t blk_addr, char data[static USZRAM_BLOCK_SIZE]
 	uint_least32_t pg_addr = blk_addr / BLK_PER_PG;
 	struct page *pg = uszram.pgtbl + pg_addr;
 
-	if (!get_pg_alloc(pg)) {
+	if (pg->data == NULL) {
 		memset(data, 0, USZRAM_BLOCK_SIZE);
 		return 0;
 	}
 
 	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
-	int offset = blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
+	size_type offset = blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
 	int ret = 0;
 
 	// Lock uszram.locks[lock_addr] as reader
-	char *raw_pg = get_pg_raw(pg);
-	if (raw_pg) {
-		memcpy(data, raw_pg + offset, USZRAM_BLOCK_SIZE);
+	if (is_huge(pg)) {
+		memcpy(data, get_raw(pg) + offset, USZRAM_BLOCK_SIZE);
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
 		ret = decompress(pg, raw_pg, offset + USZRAM_BLOCK_SIZE);
@@ -100,7 +99,7 @@ int uszram_read_pg(uint_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 
 	struct page *pg = uszram.pgtbl + pg_addr;
 
-	if (!get_pg_alloc(pg)) {
+	if (pg->data == NULL) {
 		memset(data, 0, USZRAM_PAGE_SIZE);
 		return 0;
 	}
@@ -109,9 +108,8 @@ int uszram_read_pg(uint_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 	int ret = 0;
 
 	// Lock uszram.locks[lock_addr] as reader
-	char *raw_pg = get_pg_raw(pg);
-	if (raw_pg)
-		memcpy(data, raw_pg, USZRAM_PAGE_SIZE);
+	if (is_huge(pg))
+		memcpy(data, get_raw(pg), USZRAM_PAGE_SIZE);
 	else
 		ret = decompress(pg, data, USZRAM_PAGE_SIZE);
 	// Unlock uszram.locks[lock_addr] as reader
@@ -129,22 +127,22 @@ int uszram_write_blk(uint_least32_t blk_addr,
 
 	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	int offset = blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
+	char compr_pg[USZRAM_PAGE_SIZE];
 	int new_size;
 
 	// Lock uszram.pgtbl[lock_addr] as writer
-	char *raw_pg = get_pg_raw(pg);
-	if (raw_pg) {
-		new_size = change_blk_write(pg, raw_pg, offset, data);
-	} else {
+	if (pg->data == NULL) {
 		char raw_pg[USZRAM_PAGE_SIZE] = {0};
-		if (pg->data) {
-			new_size = decompress(pg, raw_pg, USZRAM_PAGE_SIZE);
-			if (new_size < 0)
-				goto out;
-		}
-		new_size = change_blk_write(pg, raw_pg, offset, data);
+		memcpy(raw_pg + offset, data, USZRAM_BLOCK_SIZE);
+		new_size = compress(raw_pg, compr_pg);
+	} else if (is_huge(pg)) {
+		memcpy(get_raw(pg) + offset, data, USZRAM_BLOCK_SIZE);
+		new_size = maybe_recompress(pg, data, offset, 1, compr_pg);
+	} else {
+		new_size = read_mod_write(pg, data, offset, 1, compr_pg);
 	}
-out:
+	if (new_size > 0)
+		maybe_reallocate(pg, USZRAM_PAGE_SIZE, new_size);
 	// Unlock uszram.pgtbl[lock_addr] as writer
 	return new_size;
 }

@@ -2,19 +2,22 @@
 #define COMPR_EXTERN_META_H
 
 
-#include "compr-api.h"
+#include "../compr-api.h"
 
+
+inline static _Bool is_huge(struct page *pg)
+{
+	return pg->compr_data.size & (1 << USZRAM_PAGE_SHIFT);
+}
 
 inline static int get_size(struct page *pg)
 {
-	return pg->compr_data.size;
+	return is_huge(pg) ? USZRAM_PAGE_SIZE : pg->compr_data.size;
 }
 
 inline static char *get_raw(struct page *pg)
 {
-	if (pg->compr_data.size >= USZRAM_PAGE_SIZE)
-		return pg->data;
-	return NULL;
+	return pg->data;
 }
 
 
