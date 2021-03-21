@@ -3,7 +3,7 @@
 
 
 #include "../compr-api.h"
-// #include "zapi.h"
+// #include "zapi/src/zapi.h"
 
 
 inline static int get_size(struct page *pg)

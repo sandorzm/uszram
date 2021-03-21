@@ -1,7 +1,8 @@
-#include <string.h>
 #include <threads.h>
 
 #include <lz4.h>
+
+#include "allocators/uszram-basic.h"
 
 #ifdef USZRAM_LZ4
 #  include "compressors/uszram-lz4.h"
@@ -28,18 +29,17 @@ static struct uszram {
 	struct stats stats;
 } uszram;
 
-inline static int write_compressed(struct page *pg, const char *raw_pg,
-				   const char *compr_pg, int compr_size)
+inline static int write_page(struct page *pg, const char *raw_pg,
+			     const char *compr_pg, int compr_size)
 {
 	if (compr_size == 0) {
 		compr_size = USZRAM_PAGE_SIZE;
-		if (get_pg_raw(pg))
+		if (is_huge(pg))
 			goto out;
 		compr_pg = raw_pg;
 	}
-	maybe_realloc(pg, compr_size);
-	pg->flags = compr_size;		// Change when more flags are added
-	memcpy(pg->data, compr_pg, compr_size);
+	maybe_reallocate(pg, get_size(pg), compr_size);
+	write_compressed(pg, compr_pg, compr_size);
 out:
 	return compr_size;
 }
@@ -52,7 +52,7 @@ inline static int change_blk_write(struct page *pg, char *raw_pg,
 	int new_size = LZ4_compress_default(raw_pg, compr_pg,
 					    USZRAM_PAGE_SIZE,
 					    USZRAM_PAGE_SIZE);
-	return write_compressed(pg, raw_pg, compr_pg, new_size);
+	return write_page(pg, raw_pg, compr_pg, new_size);
 }
 
 int uszram_init(void)
@@ -83,11 +83,9 @@ int uszram_read_blk(uint_least32_t blk_addr, char data[static USZRAM_BLOCK_SIZE]
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
 		ret = decompress(pg, raw_pg, offset + USZRAM_BLOCK_SIZE);
-		if (ret < 0)
-			goto out;
-		memcpy(data, raw_pg + offset, USZRAM_BLOCK_SIZE);
+		if (ret >= 0)
+			memcpy(data, raw_pg + offset, USZRAM_BLOCK_SIZE);
 	}
-out:
 	// Unlock uszram.locks[lock_addr] as reader
 	return ret;
 }
@@ -124,25 +122,29 @@ int uszram_write_blk(uint_least32_t blk_addr,
 
 	uint_least32_t pg_addr = blk_addr / BLK_PER_PG;
 	struct page *pg = uszram.pgtbl + pg_addr;
-
-	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	int offset = blk_addr % BLK_PER_PG * USZRAM_BLOCK_SIZE;
-	char compr_pg[USZRAM_PAGE_SIZE];
 	int new_size;
 
-	// Lock uszram.pgtbl[lock_addr] as writer
 	if (pg->data == NULL) {
-		char raw_pg[USZRAM_PAGE_SIZE] = {0};
+		char raw_pg[USZRAM_PAGE_SIZE] = {0}, compr_pg[MAX_NON_HUGE];
 		memcpy(raw_pg + offset, data, USZRAM_BLOCK_SIZE);
 		new_size = compress(raw_pg, compr_pg);
-	} else if (is_huge(pg)) {
-		memcpy(get_raw(pg) + offset, data, USZRAM_BLOCK_SIZE);
-		new_size = maybe_recompress(pg, data, offset, 1, compr_pg);
-	} else {
-		new_size = read_mod_write(pg, data, offset, 1, compr_pg);
+		write_page(pg, raw_pg, compr_pg, new_size);
 	}
-	if (new_size > 0)
-		maybe_reallocate(pg, USZRAM_PAGE_SIZE, new_size);
+
+	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
+
+	// Lock uszram.pgtbl[lock_addr] as writer
+	if (is_huge(pg)) {
+		new_size = read_mod_write(pg, data, offset, 1, compr_pg);
+	} else {
+		char raw_pg[USZRAM_PAGE_SIZE], compr_pg[MAX_NON_HUGE];
+		new_size = read_mod_write(pg, data, offset, 1, raw_pg);
+	}
+	if (new_size >= 0) {
+		maybe_reallocate(pg, get_size(pg), new_size);
+		write_compressed(pg, compr_pg, new_size); // New write_compressed function
+	}
 	// Unlock uszram.pgtbl[lock_addr] as writer
 	return new_size;
 }
@@ -157,10 +159,10 @@ int uszram_write_pg(uint_least32_t pg_addr,
 	uint_least32_t lock_addr = pg_addr / USZRAM_PG_PER_LOCK;
 	char compr_pg[USZRAM_PAGE_SIZE];
 
-	int new_size = LZ4_compress_default(data, compr_pg, USZRAM_PAGE_SIZE,
-					    USZRAM_PAGE_SIZE);
+	int new_size = compress(data, compr_pg);
+
 	// Lock uszram.locks[lock_addr] as writer
-	new_size = write_compressed(pg, data, compr_pg, new_size);
+	new_size = write_page(pg, data, compr_pg, new_size);
 	// Unlock uszram.locks[lock_addr] as writer
 	return new_size;
 }

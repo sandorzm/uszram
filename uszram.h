@@ -38,14 +38,21 @@
  * The second definition sets the memory allocation strategy:
  * - USZRAM_BASIC selects a basic strategy
  *
- * The third definition sets the compression library:
+ * Compressed pages are limited in size to USZRAM_MAX_COMPR_FRAC times the page
+ * size. Those that would be bigger than this threshold are instead stored as
+ * raw, uncompressed data, occupying the full page size---what little space
+ * compression would save is not deemed worth the overhead.
+ * USZRAM_MAX_COMPR_FRAC must be at least 1/USZRAM_PAGE_SIZE and at most 1.
+ *
+ * The fourth definition sets the compression library:
  * - USZRAM_LZ4 selects plain LZ4
  * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
  *   compression work as much as possible and thus increase speed
  */
 #define USZRAM_JEMALLOC
 #define USZRAM_BASIC
-#define USZRAM_ZAPI
+#define USZRAM_MAX_COMPR_FRAC 0.75f
+#define USZRAM_LZ4
 
 
 /* Don't change any of the following lines.

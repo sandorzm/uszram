@@ -5,12 +5,13 @@
 #include "../alloc-api.h"
 
 
-static void maybe_reallocate(struct page *pg, int old_size, int new_size)
+static void maybe_reallocate(struct page *pg, size_type old_size,
+			     size_type new_size)
 {
-	if (pg->data == NULL || old_size != new_size) {
-		free(pg->data);
-		pg->data = calloc(new_size, 1);
-	}
+	if (old_size == new_size)
+		return;
+	free(pg->data);
+	pg->data = malloc(new_size);
 }
 
 

@@ -1,5 +1,5 @@
-#ifndef USZRAM_PRIVATE_H
-#define USZRAM_PRIVATE_H
+#ifndef USZRAM_PAGE_H
+#define USZRAM_PAGE_H
 
 
 #include "uszram-def.h"
@@ -26,4 +26,4 @@ struct page {
 };
 
 
-#endif // USZRAM_PRIVATE_H
+#endif // USZRAM_PAGE_H
