@@ -2,7 +2,9 @@
 #define USZRAM_ZAPI_DEF_H
 
 
-#define NO_COMPR_METADATA
+struct compr_data {
+	unsigned char updates;
+};
 
 
 #endif // USZRAM_ZAPI_DEF_H
