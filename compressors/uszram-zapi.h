@@ -17,18 +17,24 @@ inline static size_type get_size(struct page *pg)
 			   : zapi_get_size(pg->data);
 }
 
-static size_type compress(const char src[static USZRAM_PAGE_SIZE],
-			  char dest[static MAX_NON_HUGE])
+inline static void free_reachable(struct page *pg)
+{
+	zapi_free(pg->data);
+}
+
+inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
+				 char dest[static MAX_NON_HUGE])
 {
 	return zapi_generate_page(src, dest);
 }
 
-static int decompress(struct page *pg, char *dest, size_type bytes)
+inline static int decompress(struct page *pg, size_type bytes, char *dest)
 {
 	return zapi_decompress_page(pg->data, dest);
 }
 
-static void write_compressed(struct page *pg, const char *src, size_type bytes)
+inline static void write_compressed(struct page *pg, size_type bytes,
+				    const char src[static bytes])
 {
 	memcpy(pg->data, src, bytes);
 }
@@ -45,9 +51,9 @@ static _Bool needs_recompress(struct page *pg, size_type blocks)
 	return 0;
 }
 
-static int read_modify(struct page *pg,
-		       const char new_data[static USZRAM_BLOCK_SIZE],
-		       size_type offset, size_type blocks, char *raw_pg)
+static int read_modify(struct page *pg, size_type offset, size_type blocks,
+		       const char new_data[static blocks * USZRAM_BLOCK_SIZE],
+		       char *raw_pg)
 {
 	if (is_huge(pg)) {
 		memcpy(pg->data + offset, new_data, blocks * USZRAM_BLOCK_SIZE);

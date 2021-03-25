@@ -1,5 +1,5 @@
-#ifndef USZRAM_POSIX_MTX_H
-#define USZRAM_POSIX_MTX_H
+#ifndef USZRAM_PTH_MTX_H
+#define USZRAM_PTH_MTX_H
 
 
 #include <pthread.h>
@@ -42,4 +42,4 @@ inline static int unlock_as_writer(struct lock *lock)
 }
 
 
-#endif // USZRAM_POSIX_MTX_H
+#endif // USZRAM_PTH_MTX_H

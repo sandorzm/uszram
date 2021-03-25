@@ -1,5 +1,5 @@
-#ifndef USZRAM_ISO_MTX_H
-#define USZRAM_ISO_MTX_H
+#ifndef USZRAM_STD_MTX_H
+#define USZRAM_STD_MTX_H
 
 
 #include <threads.h>
@@ -43,4 +43,4 @@ inline static int unlock_as_writer(struct lock *lock)
 }
 
 
-#endif // USZRAM_ISO_MTX_H
+#endif // USZRAM_STD_MTX_H

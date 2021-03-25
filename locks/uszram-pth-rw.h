@@ -1,5 +1,5 @@
-#ifndef USZRAM_POSIX_RW_H
-#define USZRAM_POSIX_RW_H
+#ifndef USZRAM_PTH_RW_H
+#define USZRAM_PTH_RW_H
 
 
 #include <pthread.h>
@@ -42,4 +42,4 @@ inline static int unlock_as_writer(struct lock *lock)
 }
 
 
-#endif // USZRAM_POSIX_RW_H
+#endif // USZRAM_PTH_RW_H

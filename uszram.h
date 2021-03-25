@@ -15,13 +15,12 @@
  * bytes. USZRAM_PAGE_SHIFT must be at least USZRAM_BLOCK_SHIFT and at most 28
  * (or at most 14 if your implementation uses 16-bit int).
  *
- * USZRAM_BLK_ADDR_MAX is the maximum logical block address, or one fewer than
- * the number of logical blocks in the store. It must be at least 0 and at most
- * 2^32 - 1.
+ * USZRAM_BLOCK_COUNT is the number of logical blocks in the store. It must be
+ * at least 1 and at most 2^63.
  */
-#define USZRAM_BLOCK_SHIFT   9
-#define USZRAM_PAGE_SHIFT   12
-#define USZRAM_BLK_ADDR_MAX 31
+#define USZRAM_BLOCK_SHIFT  9u
+#define USZRAM_PAGE_SHIFT  12u
+#define USZRAM_BLOCK_COUNT 32u
 
 /* Change the next 3 definitions to select the memory allocator and compressor.
  *
@@ -44,18 +43,17 @@
 /* Change the next 2 definitions to configure the handling of large pages.
  *
  * Compressed pages are limited to USZRAM_MAX_COMPR_FRAC times the page size.
- * Those that would be bigger ("huge" pages) are instead stored as uncompressed
- * raw data, occupying the full page size (what little space compression would
- * save is not deemed worth the overhead). USZRAM_MAX_COMPR_FRAC must be at
- * least 1 / USZRAM_PAGE_SIZE and at most 1.
+ * Those that would be bigger ("huge" pages) are instead stored uncompressed,
+ * occupying the full page size (what little space compression would save is not
+ * deemed worth the overhead). USZRAM_MAX_COMPR_FRAC must be at least
+ * 1 / USZRAM_PAGE_SIZE and at most 1.
  *
- * The compressor allows huge pages to accumulate USZRAM_HUGE_WAIT block updates
- * before trying to compress them again (so it doesn't waste too much time
- * compressing incompressible data). USZRAM_HUGE_WAIT must be at least 1 and at
- * most 64.
+ * uszram allows huge pages to accumulate USZRAM_HUGE_WAIT block updates before
+ * compressing them again (so it doesn't waste too much time compressing
+ * incompressible data). USZRAM_HUGE_WAIT must be at least 1 and at most 64.
  */
 #define USZRAM_MAX_COMPR_FRAC 0.75f
-#define USZRAM_HUGE_WAIT      64
+#define USZRAM_HUGE_WAIT      64u
 
 /* Change the next 2 definitions to configure locking.
  *
@@ -64,29 +62,30 @@
  * at least 1.
  *
  * The second definition sets the lock type:
- * - USZRAM_ISO_MTX selects a plain mutex from the C standard library
- * - USZRAM_POSIX_MTX selects a plain mutex from the POSIX pthread library
- * - USZRAM_POSIX_RW selects a multi-reader lock from the POSIX pthread library
+ * - USZRAM_STD_MTX selects a plain mutex from the C standard library
+ * - USZRAM_PTH_MTX selects a plain mutex from the pthread library
+ * - USZRAM_PTH_RW selects a readers-writer lock from the pthread library
  */
-#define USZRAM_PG_PER_LOCK 2
-#define USZRAM_POSIX_RW
+#define USZRAM_PG_PER_LOCK 2u
+#define USZRAM_PTH_RW
 
 
 /* Don't change any of the following lines.
- *
- * No casting needed here because block and page sizes are guaranteed by the
- * specifications above to fit into an int.
  */
-#define USZRAM_BLOCK_SIZE (1 << USZRAM_BLOCK_SHIFT)
-#define USZRAM_PAGE_SIZE  (1 << USZRAM_PAGE_SHIFT)
+#define USZRAM_BLOCK_SIZE (1u << USZRAM_BLOCK_SHIFT)
+#define USZRAM_PAGE_SIZE  (1u << USZRAM_PAGE_SHIFT)
+#define USZRAM_BLK_PER_PG (1u << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT))
 
 
 int uszram_init(void);
 int uszram_exit(void);
 int uszram_read_blk (uint_least32_t blk_addr, char data[static USZRAM_BLOCK_SIZE]);
 int uszram_read_pg  (uint_least32_t pg_addr,  char data[static USZRAM_PAGE_SIZE]);
-int uszram_write_blk(uint_least32_t blk_addr, const char data[static USZRAM_BLOCK_SIZE]);
-int uszram_write_pg (uint_least32_t pg_addr,  const char data[static USZRAM_PAGE_SIZE]);
+int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
+		     const char data[static USZRAM_BLOCK_SIZE]);
+int uszram_write_pg (uint_least32_t pg_addr, uint_least32_t pages,
+		     const char data[static USZRAM_PAGE_SIZE]);
+int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
 
 
 #endif // USZRAM_H
