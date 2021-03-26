@@ -16,7 +16,7 @@
  * (or at most 14 if your implementation uses 16-bit int).
  *
  * USZRAM_BLOCK_COUNT is the number of logical blocks in the store. It must be
- * at least 1 and at most 2^63.
+ * at least 1 and at most (1 << 32).
  */
 #define USZRAM_BLOCK_SHIFT  9u
 #define USZRAM_PAGE_SHIFT  12u
@@ -59,7 +59,7 @@
  *
  * USZRAM_PG_PER_LOCK adjusts lock granularity for multithreading. It is the
  * maximum number of pages that can be controlled by a single lock. It must be
- * at least 1.
+ * at least 1 and at most (1 << 32).
  *
  * The second definition sets the lock type:
  * - USZRAM_STD_MTX selects a plain mutex from the C standard library
@@ -75,16 +75,19 @@
 #define USZRAM_BLOCK_SIZE (1u << USZRAM_BLOCK_SHIFT)
 #define USZRAM_PAGE_SIZE  (1u << USZRAM_PAGE_SHIFT)
 #define USZRAM_BLK_PER_PG (1u << (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT))
+#define USZRAM_PAGE_COUNT ((USZRAM_BLOCK_COUNT - 1) / USZRAM_BLK_PER_PG + 1)
 
 
 int uszram_init(void);
 int uszram_exit(void);
-int uszram_read_blk (uint_least32_t blk_addr, char data[static USZRAM_BLOCK_SIZE]);
-int uszram_read_pg  (uint_least32_t pg_addr,  char data[static USZRAM_PAGE_SIZE]);
-int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
-		     const char data[static USZRAM_BLOCK_SIZE]);
+int uszram_read_pg  (uint_least32_t pg_addr, uint_least32_t pages,
+		     char data[static pages * USZRAM_PAGE_SIZE]);
+int uszram_read_blk (uint_least32_t blk_addr, uint_least32_t blocks,
+		     char data[static blocks * USZRAM_BLOCK_SIZE]);
 int uszram_write_pg (uint_least32_t pg_addr, uint_least32_t pages,
 		     const char data[static USZRAM_PAGE_SIZE]);
+int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
+		     const char data[static USZRAM_BLOCK_SIZE]);
 int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
 
 
