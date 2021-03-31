@@ -141,6 +141,19 @@ inline static int write_blk(struct page *pg, size_type offset, size_type blocks,
 	return new_size;
 }
 
+int uszram_delete_all(void)
+{
+	uint_least64_t pg_addr = 0, pg_next = 0;
+	for (uint_least64_t lk_addr = 0; lk_addr != LOCK_COUNT; ++lk_addr) {
+		pg_next += PG_PER_LOCK;
+		lock_as_writer(lktbl + lk_addr);
+		for (; pg_addr != pg_next; ++pg_addr)
+			delete_pg(pgtbl + pg_addr);
+		unlock_as_writer(lktbl + lk_addr);
+	}
+	return 0;
+}
+
 int uszram_init(void)
 {
 	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
@@ -150,10 +163,9 @@ int uszram_init(void)
 
 int uszram_exit(void)
 {
+	uszram_delete_all();
 	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
 		destroy_lock(lktbl + i);
-	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i)
-		delete_pg(pgtbl + i);
 	return 0;
 }
 
