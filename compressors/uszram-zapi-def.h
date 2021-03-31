@@ -2,8 +2,11 @@
 #define USZRAM_ZAPI_DEF_H
 
 
+#include "../uszram-def.h"
+
+
 struct compr_data {
-	unsigned char updates;
+	size_type size;
 };
 
 

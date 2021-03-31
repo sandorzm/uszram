@@ -14,6 +14,11 @@ inline static _Bool is_huge(struct page *pg);
  */
 inline static size_type get_size(struct page *pg);
 
+/* get_size_primary() is like get_size() but returns only the number of bytes of
+ * heap data allocated to pg->data, not anything else reachable from it.
+ */
+inline static size_type get_size_primary(struct page *pg);
+
 /* free_reachable() deallocates any heap data reachable from pg->data, but not
  * pg->data itself.
  */
@@ -40,10 +45,10 @@ inline static int decompress(struct page *pg, size_type bytes,
 inline static void write_compressed(struct page *pg, size_type bytes,
 				    const char src[static bytes]);
 
-/* read_modify() updates 'blocks' blocks starting at 'offset' bytes from the
+/* read_modify() updates 'blocks' blocks starting at 'offset' blocks from the
  * beginning of the page represented by pg with new_data. If pg->data is a raw
- * page, it's updated in place; otherwise, it's decompressed first, returning
- * any negative error code from decompress().
+ * page, it's updated in place; otherwise, it's decompressed first, and any
+ * negative error code from decompress() is returned.
  *
  * blocks can't be zero, and the range specified by offset and blocks must be
  * within the page size. Unless pg->data is raw, raw_pg must be non-null and at

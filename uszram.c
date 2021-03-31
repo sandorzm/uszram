@@ -64,23 +64,22 @@ inline static int read_blk(struct page *pg, size_type offset, size_type blocks,
 			   struct lock *lock)
 {
 	offset *= USZRAM_BLOCK_SIZE;
+	blocks *= USZRAM_BLOCK_SIZE;
 	int ret = 0;
 
 	if (pg->data == NULL) {
-		memset(data, 0, blocks * USZRAM_BLOCK_SIZE);
+		memset(data, 0, blocks);
 		return ret;
 	}
 
 	lock_as_reader(lock);
 	if (is_huge(pg)) {
-		memcpy(data, pg->data + offset, blocks * USZRAM_BLOCK_SIZE);
+		memcpy(data, pg->data + offset, blocks);
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
-		ret = decompress(pg, offset + blocks * USZRAM_BLOCK_SIZE,
-				 raw_pg);
+		ret = decompress(pg, offset + blocks, raw_pg);
 		if (ret == 0)
-			memcpy(data, raw_pg + offset,
-			       blocks * USZRAM_BLOCK_SIZE);
+			memcpy(data, raw_pg + offset, blocks);
 	}
 	unlock_as_reader(lock);
 
@@ -104,15 +103,15 @@ inline static size_type write_pg(struct page *pg,
 }
 
 inline static int write_blk(struct page *pg, size_type offset, size_type blocks,
-			    const char data[blocks * USZRAM_BLOCK_SIZE],
+			    const char data[static blocks * USZRAM_BLOCK_SIZE],
 			    struct lock *lock)
 {
-	offset *= USZRAM_BLOCK_SIZE;
 	size_type new_size = 0;
 
 	if (pg->data == NULL) {
 		char raw_pg[USZRAM_PAGE_SIZE] = {0}, compr_pg[MAX_NON_HUGE];
-		memcpy(raw_pg + offset, data, blocks * USZRAM_BLOCK_SIZE);
+		memcpy(raw_pg + offset * USZRAM_BLOCK_SIZE, data,
+		       blocks * USZRAM_BLOCK_SIZE);
 		new_size = compress(raw_pg, compr_pg);
 
 		lock_as_writer(lock);

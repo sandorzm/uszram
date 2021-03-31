@@ -7,12 +7,17 @@
 
 inline static _Bool is_huge(struct page *pg)
 {
-	return pg->compr_data.size & (1 << USZRAM_PAGE_SHIFT);
+	return pg->compr_data.size & (1u << USZRAM_PAGE_SHIFT);
 }
 
 inline static size_type get_size(struct page *pg)
 {
 	return is_huge(pg) ? USZRAM_PAGE_SIZE : pg->compr_data.size;
+}
+
+inline static size_type get_size_primary(struct page *pg)
+{
+	return get_size(pg);
 }
 
 inline static void free_reachable(struct page *pg) {}
@@ -40,6 +45,7 @@ static int read_modify(struct page *pg, size_type offset, size_type blocks,
 		       const char new_data[static blocks * USZRAM_BLOCK_SIZE],
 		       char *raw_pg)
 {
+	offset *= USZRAM_BLOCK_SIZE;
 	if (is_huge(pg)) {
 		memcpy(pg->data + offset, new_data, blocks * USZRAM_BLOCK_SIZE);
 		return needs_recompress(pg, blocks);
