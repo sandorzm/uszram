@@ -12,8 +12,9 @@
  * at most 28 (or at most 14 if your implementation uses 16-bit int).
  *
  * Page size, the unit in which data is compressed, is (1u << USZRAM_PAGE_SHIFT)
- * bytes. USZRAM_PAGE_SHIFT must be at least USZRAM_BLOCK_SHIFT and at most 28
- * (or at most 14 if your implementation uses 16-bit int).
+ * bytes. USZRAM_PAGE_SHIFT must be at least USZRAM_BLOCK_SHIFT, at most
+ * USZRAM_BLOCK_SHIFT + 8, and at most 28 (or at most 14 if your implementation
+ * uses 16-bit int).
  *
  * USZRAM_BLOCK_COUNT is the number of logical blocks in the store. It must be
  * at least 1 and at most (1ull << 32).
@@ -91,6 +92,7 @@ int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
 int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		     const char data[static blocks * USZRAM_BLOCK_SIZE]);
 int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
+int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks);
 int uszram_delete_all(void);
 
 int uszram_pg_size(uint_least32_t pg_addr);

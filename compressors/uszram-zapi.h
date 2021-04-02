@@ -59,16 +59,22 @@ inline static _Bool needs_recompress(struct page *pg, size_type blocks)
 }
 
 static int read_modify(struct page *pg, size_type offset, size_type blocks,
-		       const char new_data[static blocks * USZRAM_BLOCK_SIZE],
-		       char *raw_pg, int *size_change)
+		       const char *new_data, char *raw_pg)
 {
 	offset *= USZRAM_BLOCK_SIZE;
+	size_type bytes = blocks * USZRAM_BLOCK_SIZE;
 	if (is_huge(pg)) {
-		memcpy(pg->data + offset, new_data, blocks * USZRAM_BLOCK_SIZE);
+		if (new_data == NULL)
+			memset(pg->data + offset, 0, bytes);
+		else
+			memcpy(pg->data + offset, new_data, bytes);
 		return needs_recompress(pg, blocks);
 	}
+	if (new_data == NULL)
+		return zapi_delete_block(pg->data, offset, blocks, raw_pg,
+					 MAX_NON_HUGE);
 	return zapi_update_block(pg->data, new_data, offset, blocks, raw_pg,
-				 MAX_NON_HUGE, size_change);
+				 MAX_NON_HUGE);
 }
 
 

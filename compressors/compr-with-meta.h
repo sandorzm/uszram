@@ -46,18 +46,24 @@ inline static _Bool needs_recompress(struct page *pg, size_type blocks)
 }
 
 static int read_modify(struct page *pg, size_type offset, size_type blocks,
-		       const char new_data[static blocks * USZRAM_BLOCK_SIZE],
-		       char *raw_pg, int *size_change)
+		       const char *new_data, char *raw_pg)
 {
 	offset *= USZRAM_BLOCK_SIZE;
+	size_type bytes = blocks * USZRAM_BLOCK_SIZE;
 	if (is_huge(pg)) {
-		memcpy(pg->data + offset, new_data, blocks * USZRAM_BLOCK_SIZE);
+		if (new_data == NULL)
+			memset(pg->data + offset, 0, bytes);
+		else
+			memcpy(pg->data + offset, new_data, bytes);
 		return needs_recompress(pg, blocks);
 	}
 	int ret = decompress(pg, USZRAM_PAGE_SIZE, raw_pg);
 	if (ret < 0)
 		return ret;
-	memcpy(raw_pg + offset, new_data, blocks * USZRAM_BLOCK_SIZE);
+	if (new_data == NULL)
+		memset(pg->data + offset, 0, bytes);
+	else
+		memcpy(raw_pg + offset, new_data, bytes);
 	return 1;
 }
 

@@ -134,21 +134,54 @@ inline static int write_blk(struct page *pg, size_type offset, size_type blocks,
 	}
 
 	if (is_huge(pg)) {
-		if (read_modify(pg, offset, blocks, data, NULL, NULL))
+		if (read_modify(pg, offset, blocks, data, NULL))
 			return write_blk_helper(pg, compr_pg, pg->data);
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
-		int size_change = 0;
-		int ret = read_modify(pg, offset, blocks, data, raw_pg,
-				      &size_change);
+		int old_size = get_size(pg);
+		int ret = read_modify(pg, offset, blocks, data, raw_pg);
 		switch (ret) {
 		case 1:
 			stats.compr_data_size -= free_reachable(pg);
 			return write_blk_helper(pg, compr_pg, raw_pg);
 		case 0:
-			stats.compr_data_size += size_change;
+			stats.compr_data_size += (int)get_size(pg) - old_size;
 		default:
 			return ret;
+		}
+	}
+
+	return 0;
+}
+
+inline static int delete_blk(struct page *pg, size_type offset,
+			     size_type blocks,
+			     char compr_pg[static MAX_NON_HUGE])
+{
+	if (pg->data == NULL)
+		return 0;
+
+	if (is_huge(pg)) {
+		switch (read_modify(pg, offset, blocks, NULL, NULL)) {
+		case 1:
+			return write_blk_helper(pg, compr_pg, pg->data);
+		case 2:
+			delete_pg(pg);
+		}
+	} else {
+		char raw_pg[USZRAM_PAGE_SIZE];
+		int old_size = get_size(pg);
+		int ret = read_modify(pg, offset, blocks, NULL, raw_pg);
+		switch (ret) {
+		case 1:
+			stats.compr_data_size -= free_reachable(pg);
+			return write_blk_helper(pg, compr_pg, raw_pg);
+		case 0:
+			stats.compr_data_size += (int)get_size(pg) - old_size;
+		default:
+			return ret;
+		case 2:
+			delete_pg(pg);
 		}
 	}
 
@@ -293,7 +326,7 @@ int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 	uint_least32_t lk_addr = pg_addr / PG_PER_LOCK;
 	uint_least32_t pg_next = lk_addr * PG_PER_LOCK;
 	blocks = pg_addr * BLK_PER_PG;
-	char compr_pg[USZRAM_PAGE_SIZE];
+	char compr_pg[MAX_NON_HUGE];
 
 	for (; lk_addr != lk_end; ++lk_addr) {
 		if (lk_addr == (uint_least32_t)(lk_end - 1))
@@ -340,6 +373,43 @@ int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages)
 			lock_as_writer  (lktbl + lk_addr);
 			delete_pg       (pgtbl + pg_addr);
 			unlock_as_writer(lktbl + lk_addr);
+		}
+	}
+
+	return 0;
+}
+
+int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks)
+{
+	if ((uint_least64_t)blk_addr + blocks > USZRAM_BLOCK_COUNT)
+		return -1;
+
+	const uint_least32_t blk_end = blk_addr + blocks; // May overflow to 0
+	const uint_least32_t pg_end = ceil_div(blk_end, BLK_PER_PG);
+	const uint_least32_t lk_end = ceil_div(pg_end, PG_PER_LOCK);
+	uint_least32_t pg_addr = blk_addr / BLK_PER_PG;
+	uint_least32_t lk_addr = pg_addr / PG_PER_LOCK;
+	uint_least32_t pg_next = lk_addr * PG_PER_LOCK;
+	blocks = pg_addr * BLK_PER_PG;
+	char compr_pg[MAX_NON_HUGE];
+
+	for (; lk_addr != lk_end; ++lk_addr) {
+		if (lk_addr == (uint_least32_t)(lk_end - 1))
+			pg_next = pg_end;
+		else
+			pg_next += PG_PER_LOCK;
+		for (; pg_addr != pg_next; ++pg_addr) {
+			if (pg_addr == (uint_least32_t)(pg_end - 1))
+				blocks = blk_end;
+			else
+				blocks += BLK_PER_PG;
+
+			lock_as_writer(lktbl + lk_addr);
+			delete_blk(pgtbl + pg_addr, blk_addr % BLK_PER_PG,
+				   blocks - blk_addr, compr_pg);
+			unlock_as_writer(lktbl + lk_addr);
+
+			blk_addr = blocks;
 		}
 	}
 
