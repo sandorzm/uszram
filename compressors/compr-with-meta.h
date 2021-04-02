@@ -20,19 +20,23 @@ inline static size_type get_size_primary(struct page *pg)
 	return get_size(pg);
 }
 
-inline static void free_reachable(struct page *pg) {}
+inline static size_type free_reachable(struct page *pg)
+{
+	return 0;
+}
 
 inline static void write_compressed(struct page *pg, size_type bytes,
-				    const char src[static bytes])
+				    const char *src)
 {
-	memcpy(pg->data, src, bytes);
+	if (bytes)
+		memcpy(pg->data, src, bytes);
 	pg->compr_data.size = bytes;
 }
 
-static _Bool needs_recompress(struct page *pg, size_type blocks)
+inline static _Bool needs_recompress(struct page *pg, size_type blocks)
 {
 	unsigned char mask = (1 << 6) - 1;
-	unsigned char updates = (pg->compr_data.size & mask) + blocks;
+	size_type updates = (pg->compr_data.size & mask) + blocks;
 	if (updates >= USZRAM_HUGE_WAIT) {
 		pg->compr_data.size &= ~mask;
 		return 1;
@@ -43,7 +47,7 @@ static _Bool needs_recompress(struct page *pg, size_type blocks)
 
 static int read_modify(struct page *pg, size_type offset, size_type blocks,
 		       const char new_data[static blocks * USZRAM_BLOCK_SIZE],
-		       char *raw_pg)
+		       char *raw_pg, int *size_change)
 {
 	offset *= USZRAM_BLOCK_SIZE;
 	if (is_huge(pg)) {

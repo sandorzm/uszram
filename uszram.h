@@ -81,16 +81,27 @@
 
 int uszram_init(void);
 int uszram_exit(void);
+
 int uszram_read_pg(uint_least32_t pg_addr, uint_least32_t pages,
 		   char data[static pages * USZRAM_PAGE_SIZE]);
 int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		    char data[static blocks * USZRAM_BLOCK_SIZE]);
 int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
-		    const char data[static USZRAM_PAGE_SIZE]);
+		    const char data[static pages * USZRAM_PAGE_SIZE]);
 int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
-		     const char data[static USZRAM_BLOCK_SIZE]);
+		     const char data[static blocks * USZRAM_BLOCK_SIZE]);
 int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
 int uszram_delete_all(void);
+
+int uszram_pg_size(uint_least32_t pg_addr);
+_Bool uszram_pg_exists(uint_least32_t pg_addr);
+_Bool uszram_pg_is_huge(uint_least32_t pg_addr);
+
+uint_least64_t uszram_total_size(void);
+uint_least64_t uszram_pages_stored(void);
+uint_least64_t uszram_huge_pages(void);
+uint_least64_t uszram_num_compr(void);
+uint_least64_t uszram_failed_compr(void);
 
 
 #endif // USZRAM_H
