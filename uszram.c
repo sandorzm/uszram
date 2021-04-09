@@ -17,6 +17,7 @@
 #endif
 
 
+static _Atomic _Bool initialized;
 static struct page pgtbl[USZRAM_PAGE_COUNT];
 static struct lock lktbl[LOCK_COUNT];
 static struct {
@@ -273,13 +274,19 @@ int uszram_delete_all(void)
 
 int uszram_init(void)
 {
+	if (initialized)
+		return -1;
 	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
 		initialize_lock(lktbl + i);
+	initialized = 1;
 	return 0;
 }
 
 int uszram_exit(void)
 {
+	if (!initialized)
+		return -1;
+	initialized = 0;
 	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
 		destroy_lock(lktbl + i);
 	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i)
@@ -329,6 +336,7 @@ int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		read_blk(&l, offset, blocks, data);
 		data += blocks * USZRAM_BLOCK_SIZE;
 		blk_addr += blocks;
+		++l.pg_addr;
 	}
 	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
 		l.pg_next += PG_PER_LOCK;
@@ -393,6 +401,7 @@ int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		write_blk(&l, offset, blocks, data, compr_pg);
 		data += blocks * USZRAM_BLOCK_SIZE;
 		blk_addr += blocks;
+		++l.pg_addr;
 	}
 	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
 		l.pg_next += PG_PER_LOCK;
@@ -457,6 +466,7 @@ int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks)
 	if (l.pg_addr != l.pg_last) {
 		delete_blk(&l, offset, blocks, compr_pg);
 		blk_addr += blocks;
+		++l.pg_addr;
 	}
 	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
 		l.pg_next += PG_PER_LOCK;
@@ -474,6 +484,20 @@ int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks)
 	return 0;
 }
 
+_Bool uszram_pg_exists(uint_least32_t pg_addr)
+{
+	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
+		return 0;
+	return pgtbl[pg_addr].data != NULL;
+}
+
+_Bool uszram_pg_is_huge(uint_least32_t pg_addr)
+{
+	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
+		return 0;
+	return is_huge(pgtbl + pg_addr);
+}
+
 int uszram_pg_size(uint_least32_t pg_addr)
 {
 	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
@@ -489,23 +513,29 @@ int uszram_pg_size(uint_least32_t pg_addr)
 	return size;
 }
 
-_Bool uszram_pg_exists(uint_least32_t pg_addr)
+int uszram_pg_heap(uint_least32_t pg_addr)
 {
 	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
-		return 0;
-	return pgtbl[pg_addr].data != NULL;
-}
+		return -1;
 
-_Bool uszram_pg_is_huge(uint_least32_t pg_addr)
-{
-	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
-		return 0;
-	return is_huge(pgtbl + pg_addr);
+	size_type size = 0;
+	struct lock *lk = lktbl + pg_addr / PG_PER_LOCK;
+
+	lock_as_reader(lk);
+	size = get_size(pgtbl + pg_addr);
+	unlock_as_reader(lk);
+
+	return size;
 }
 
 uint_least64_t uszram_total_size(void)
 {
 	return sizeof pgtbl + sizeof lktbl + stats.compr_data_size;
+}
+
+uint_least64_t uszram_total_heap(void)
+{
+	return stats.compr_data_size;
 }
 
 uint_least64_t uszram_pages_stored(void)
@@ -518,7 +548,7 @@ uint_least64_t uszram_huge_pages(void)
 	return stats.huge_pages;
 }
 
-uint_least64_t num_compr(void)
+uint_least64_t uszram_num_compr(void)
 {
 	return stats.num_compr;
 }

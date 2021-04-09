@@ -61,7 +61,7 @@ static int read_modify(struct page *pg, size_type offset, size_type blocks,
 	if (ret < 0)
 		return ret;
 	if (new_data == NULL)
-		memset(pg->data + offset, 0, bytes);
+		memset(raw_pg + offset, 0, bytes);
 	else
 		memcpy(raw_pg + offset, new_data, bytes);
 	return 1;

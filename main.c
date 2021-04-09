@@ -4,15 +4,13 @@
 #include <stdio.h>
 
 #include "uszram.h"
+#include "test/small-test.h"
+#include "test/large-test.h"
 
 int main(void)
 {
-	uszram_init();
-	char pg1[4096] = {5, 4, 3, 4, 4, 9}, pg2[4096];
-	uszram_write_pg(0, 1, pg1);
-	uszram_read_pg(0, 1, pg2);
-	for (unsigned char i = 0; i < 10; ++i)
-		printf("%u\n", pg2[i]);
-	uszram_exit();
+	run_small_tests();
+	many_pgs_test(1, 1u << 15, 4096);
+	many_blks_test(1, 1u << 18, 512);
 	return 0;
 }

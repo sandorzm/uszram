@@ -21,7 +21,7 @@
  */
 #define USZRAM_BLOCK_SHIFT  9u
 #define USZRAM_PAGE_SHIFT  12u
-#define USZRAM_BLOCK_COUNT 32u
+#define USZRAM_BLOCK_COUNT (1u << 18)
 
 /* Change the next 3 definitions to select the memory allocator and compressor.
  *
@@ -67,7 +67,7 @@
  * - USZRAM_PTH_MTX selects a plain mutex from the pthread library
  * - USZRAM_PTH_RW selects a readers-writer lock from the pthread library
  */
-#define USZRAM_PG_PER_LOCK 2u
+#define USZRAM_PG_PER_LOCK 4u
 #define USZRAM_PTH_RW
 
 
@@ -95,11 +95,13 @@ int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
 int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks);
 int uszram_delete_all(void);
 
-int uszram_pg_size(uint_least32_t pg_addr);
 _Bool uszram_pg_exists(uint_least32_t pg_addr);
 _Bool uszram_pg_is_huge(uint_least32_t pg_addr);
+int uszram_pg_size(uint_least32_t pg_addr);
+int uszram_pg_heap(uint_least32_t pg_addr);
 
 uint_least64_t uszram_total_size(void);
+uint_least64_t uszram_total_heap(void);
 uint_least64_t uszram_pages_stored(void);
 uint_least64_t uszram_huge_pages(void);
 uint_least64_t uszram_num_compr(void);
