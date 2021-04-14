@@ -22,6 +22,7 @@ inline static size_type get_size_primary(struct page *pg)
 
 inline static size_type free_reachable(struct page *pg)
 {
+	(void)pg;
 	return 0;
 }
 

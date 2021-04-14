@@ -45,8 +45,9 @@ void call_write_fn(struct thread_data *td, long op_rand, long addr_rand)
 	mrand48_r(&td->rand_data, &compr_rand);
 	_Bool blk = (op_rand % 100 < td->w->write.percent_blks);
 
-	uint_least32_t addr = (uint_least32_t)addr_rand % uszram_counts[blk],
-		       count = td->w->write.pgblk_group[blk];
+	uint_least32_t count = td->w->write.pgblk_group[blk];
+	uint_least64_t max_count = uszram_counts[blk] - count + 1;
+	uint_least32_t addr = (uint_least32_t)addr_rand % max_count;
 	unsigned char compr_num = (uint_least32_t)compr_rand % td->compr_count;
 
 	write_fns[blk](addr, count, td->write_data[compr_num]);
@@ -55,8 +56,9 @@ void call_write_fn(struct thread_data *td, long op_rand, long addr_rand)
 void call_read_fn(struct thread_data *td, long op_rand, long addr_rand)
 {
 	_Bool blk = (op_rand % 100 < td->w->read.percent_blks);
-	uint_least32_t addr = (uint_least32_t)addr_rand % uszram_counts[blk],
-		       count = td->w->read.pgblk_group[blk];
+	uint_least32_t count = td->w->read.pgblk_group[blk];
+	uint_least64_t max_count = uszram_counts[blk] - count + 1;
+	uint_least32_t addr = (uint_least32_t)addr_rand % max_count;
 	read_fns[blk](addr, count, td->read_buf);
 }
 
@@ -83,14 +85,19 @@ void *run_thread(void *tdata)
 			call_write_fn(td, op_rand, addr_rand);
 		else
 			call_read_fn(td, op_rand, addr_rand);
-
 	}
 	return NULL;
 }
 
-void run_workload(struct workload *w)
+void run_workload(struct workload *w, _Bool print)
 {
 	if (w->compr_max > 12 || w->compr_max <= w->compr_min)
+		return;
+	if ((w->read.percent_blks < 100 && w->read.pgblk_group[0] == 0)
+	    || (w->read.percent_blks && w->read.pgblk_group[1] == 0))
+		return;
+	if ((w->write.percent_blks < 100 && w->write.pgblk_group[0] == 0)
+	    || (w->write.percent_blks && w->write.pgblk_group[1] == 0))
 		return;
 	if (w->thread_count == 0)
 		return;
@@ -108,13 +115,13 @@ void run_workload(struct workload *w)
 
 	unsigned char compr_count = w->compr_max - w->compr_min;
 	char **write_data = malloc((sizeof *write_data) * compr_count);
-	char data_name[20] = "../data/cr";
+	char data_name[17] = "data/cr";
 	int compr_chars;
 	for (unsigned char i = 0; i < compr_count; ++i) {
 		write_data[i] = malloc(write_buf_size);
-		compr_chars = snprintf(data_name + 10, 6, "%i-%i",
+		compr_chars = snprintf(data_name + 7, 6, "%i-%i",
 				       w->compr_min + i, w->compr_min + i + 1);
-		strncpy(data_name + 10 + compr_chars, ".raw", 5);
+		strncpy(data_name + 7 + compr_chars, ".raw", 5);
 		FILE *data = fopen(data_name, "r");
 		fread(write_data[i], 1, write_buf_size, data);
 		fclose(data);
@@ -122,7 +129,7 @@ void run_workload(struct workload *w)
 
 	uszram_init();
 	struct thread_data *td = malloc((sizeof *td) * w->thread_count);
-	pthread_t *threads;
+	pthread_t *threads = NULL;
 	if (w->thread_count > 1)
 		threads = malloc((sizeof *threads) * (w->thread_count - 1));
 	double duration = 0;
@@ -142,7 +149,7 @@ void run_workload(struct workload *w)
 	}
 	run_thread(td);
 	for (unsigned i = 1; i < w->thread_count; ++i)
-		pthread_join(threads[i], NULL);
+		pthread_join(threads[i - 1], NULL);
 	timespec_get(&end, TIME_UTC);
 	duration = end.tv_sec - start.tv_sec
 		   + (end.tv_nsec - start.tv_nsec) / 1e9;
@@ -151,7 +158,8 @@ void run_workload(struct workload *w)
 	       duration);
 	free(threads);
 	free(td);
-	print_stats();
+	if (print)
+		print_stats();
 	uszram_exit();
 	for (unsigned char i = 0; i < compr_count; ++i)
 		free(write_data[i]);

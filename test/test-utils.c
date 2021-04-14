@@ -33,7 +33,7 @@ void assert_equal(int expected, int actual)
 
 void assert_empty(void)
 {
-	assert_equal(0, uszram_heap_size());
+	assert_equal(0, uszram_total_heap());
 	assert_equal(0, uszram_pages_stored());
 	assert_equal(0, uszram_huge_pages());
 	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i) {

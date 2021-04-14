@@ -21,5 +21,7 @@ struct workload {
 	struct rw_workload  read, write;
 };
 
+void run_workload(struct workload *w, _Bool print);
+
 
 #endif // WORKLOAD_H
