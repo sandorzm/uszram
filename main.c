@@ -2,6 +2,7 @@
  * clang main.c uszram.c -llz4 [-ljemalloc] -lpthread [-ldl -lm -static]
  */
 #include <stdio.h>
+#include <inttypes.h>
 
 #include "uszram.h"
 #include "test/small-test.h"
@@ -13,9 +14,13 @@ int main(void)
 	// small-test.h
 	run_small_tests();
 
+	/*
+
 	// large-test.h
 	many_pgs_test(1, 1u << 15, 4096);
 	many_blks_test(1, 1u << 18, 512);
+
+	*/
 
 	// workload.h
 	struct rw_workload rw = {
@@ -33,6 +38,8 @@ int main(void)
 	};
 	for (unsigned i = 1; i <= 16; ++i) {
 		w.thread_count = i;
+		printf("%7"PRIdLEAST64" requests, %2u threads: ",
+		       w.request_count, i);
 		run_workload(&w, 0);
 	}
 

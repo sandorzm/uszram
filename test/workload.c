@@ -2,7 +2,6 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
-#include <inttypes.h>
 
 #include "workload.h"
 #include "test-utils.h"
@@ -132,9 +131,13 @@ void run_workload(struct workload *w, _Bool print)
 	pthread_t *threads = NULL;
 	if (w->thread_count > 1)
 		threads = malloc((sizeof *threads) * (w->thread_count - 1));
-	double duration = 0;
+
+	double duration = 0, cpu_duration = 0;
 	struct timespec start, end;
+	clock_t cpu_start, cpu_end;
 	timespec_get(&start, TIME_UTC);
+	cpu_start = clock();
+
 	for (unsigned i = 0; i < w->thread_count; ++i) {
 		td[i].id = i;
 		// Give each thread a different random seed
@@ -150,12 +153,14 @@ void run_workload(struct workload *w, _Bool print)
 	run_thread(td);
 	for (unsigned i = 1; i < w->thread_count; ++i)
 		pthread_join(threads[i - 1], NULL);
+
+	cpu_end = clock();
 	timespec_get(&end, TIME_UTC);
+	cpu_duration = (double)(cpu_end - cpu_start) / CLOCKS_PER_SEC;
 	duration = end.tv_sec - start.tv_sec
 		   + (end.tv_nsec - start.tv_nsec) / 1e9;
 
-	printf("%"PRIuLEAST64" requests in %.4f s\n", w->request_count,
-	       duration);
+	printf("%.4f s real time, %.4f s CPU time\n", duration, cpu_duration);
 	free(threads);
 	free(td);
 	if (print)
