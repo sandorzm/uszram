@@ -21,7 +21,8 @@ struct workload {
 	struct rw_workload  read, write;
 };
 
-void run_workload(struct workload *w, _Bool print);
+void populate_store(const struct workload *w);
+void run_workload(const struct workload *w);
 
 
 #endif // WORKLOAD_H

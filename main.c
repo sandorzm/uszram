@@ -8,6 +8,7 @@
 #include "test/small-test.h"
 #include "test/large-test.h"
 #include "test/workload.h"
+#include "test/test-utils.h"
 
 int main(void)
 {
@@ -23,6 +24,12 @@ int main(void)
 	*/
 
 	// workload.h
+	struct workload pop = {
+		.compr_min = 7,
+		.compr_max = 8,
+		.request_count = USZRAM_PAGE_COUNT,
+		.thread_count = 8,
+	};
 	struct rw_workload rw = {
 		.percent_blks = 50,
 		.pgblk_group = {1, 4},
@@ -36,12 +43,19 @@ int main(void)
 		.read = rw,
 		.write = rw,
 	};
-	for (unsigned i = 1; i <= 16; ++i) {
+
+	uszram_init();
+	printf("Populating: ");
+	populate_store(&pop);
+	print_stats();
+
+	for (unsigned i = 1; i <= 8; ++i) {
 		w.thread_count = i;
-		printf("%7"PRIdLEAST64" requests, %2u threads: ",
+		printf("%7"PRIuLEAST64" requests, %2u threads: ",
 		       w.request_count, i);
-		run_workload(&w, 0);
+		run_workload(&w);
 	}
+	uszram_exit();
 
 	return 0;
 }

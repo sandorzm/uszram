@@ -7,6 +7,14 @@
 #include "../uszram.h"
 
 
+struct test_timer {
+	struct timespec  start,     end;
+	clock_t          cpu_start, cpu_end;
+};
+
+struct test_timer start_timer(void);
+void stop_timer(struct test_timer *t);
+
 void print_stats(void);
 
 void assert_safe(_Bool b);

@@ -1,9 +1,29 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "test-utils.h"
 
+
+struct test_timer start_timer(void)
+{
+	struct test_timer t;
+	t.cpu_start = clock();
+	timespec_get(&t.start, TIME_UTC);
+	return t;
+}
+
+void stop_timer(struct test_timer *t)
+{
+	timespec_get(&t->end, TIME_UTC);
+	t->cpu_end = clock();
+
+	double cpu_sec = (double)(t->cpu_end - t->cpu_start) / CLOCKS_PER_SEC;
+	double real_sec = t->end.tv_sec - t->start.tv_sec
+			  + (t->end.tv_nsec - t->start.tv_nsec) / 1e9;
+	printf("%.4f s real time, %.4f s CPU time\n", real_sec, cpu_sec);
+}
 
 void print_stats(void)
 {
