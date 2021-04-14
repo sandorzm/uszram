@@ -6,15 +6,6 @@
 #include "test-utils.h"
 
 
-void print_stats(void)
-{
-	printf("Total size:   %"PRIuLEAST64"\n", uszram_total_size());
-	printf("Pages stored: %"PRIuLEAST64"\n", uszram_pages_stored());
-	printf("Huge pages:   %"PRIuLEAST64"\n", uszram_huge_pages());
-	printf("Compressions: %"PRIuLEAST64"\n", uszram_num_compr());
-	printf("Failed compr: %"PRIuLEAST64"\n", uszram_failed_compr());
-}
-
 void assert_non_null(void *p)
 {
 	if (p != NULL)

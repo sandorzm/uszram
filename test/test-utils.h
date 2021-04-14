@@ -7,6 +7,8 @@
 #include "../uszram.h"
 
 
+void print_stats(void);
+
 void assert_safe(_Bool b);
 void assert_equal(int expected, int actual);
 void assert_empty(void);
