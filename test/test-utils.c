@@ -25,13 +25,18 @@ void stop_timer(struct test_timer *t)
 	printf("%.4f s real time, %.4f s CPU time\n", real_sec, cpu_sec);
 }
 
-void print_stats(void)
+void print_stats(int indent)
 {
-	printf("Total size:   %"PRIuLEAST64"\n", uszram_total_size());
-	printf("Pages stored: %"PRIuLEAST64"\n", uszram_pages_stored());
-	printf("Huge pages:   %"PRIuLEAST64"\n", uszram_huge_pages());
-	printf("Compressions: %"PRIuLEAST64"\n", uszram_num_compr());
-	printf("Failed compr: %"PRIuLEAST64"\n", uszram_failed_compr());
+	printf("%*sTotal size:   %"PRIuLEAST64"\n"
+	       "%*sPages stored: %"PRIuLEAST64"\n"
+	       "%*sHuge pages:   %"PRIuLEAST64"\n"
+	       "%*sCompressions: %"PRIuLEAST64"\n"
+	       "%*sFailed compr: %"PRIuLEAST64"\n",
+	       indent, "", uszram_total_size(),
+	       indent, "", uszram_pages_stored(),
+	       indent, "", uszram_huge_pages(),
+	       indent, "", uszram_num_compr(),
+	       indent, "", uszram_failed_compr());
 }
 
 void assert_safe(_Bool b)

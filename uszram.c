@@ -291,6 +291,7 @@ int uszram_exit(void)
 		destroy_lock(lktbl + i);
 	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i)
 		delete_pg(pgtbl + i);
+	stats.num_compr = stats.failed_compr = 0;
 	return 0;
 }
 

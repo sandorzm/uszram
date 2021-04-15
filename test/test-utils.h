@@ -15,7 +15,7 @@ struct test_timer {
 struct test_timer start_timer(void);
 void stop_timer(struct test_timer *t);
 
-void print_stats(void);
+void print_stats(int indent);
 
 void assert_safe(_Bool b);
 void assert_equal(int expected, int actual);

@@ -66,20 +66,23 @@ static inline void call_write_fn(struct thread_data *td,
 	write_fns[blk](addr, count, td->write_data[compr]);
 }
 
-static void *populate_thread(void *tdata)
+static void *pop_thread(void *tdata)
 {
 	struct thread_data *const td = tdata;
 
 	uint_least64_t pg_count = td->w->request_count;
-	if (pg_count > USZRAM_PAGE_SIZE)
-		pg_count = USZRAM_PAGE_SIZE;
+	if (pg_count > USZRAM_PAGE_COUNT)
+		pg_count = USZRAM_PAGE_COUNT;
 	uint_least64_t req = pg_count / td->w->thread_count;
-	const uint_least32_t addr = req * td->id;
+	uint_least32_t addr = req * td->id;
 
-	if (td->id)
-		srand48_r(td->seed, &td->rand_data);
-	else // Thread 0 gets the leftover requests since it always exists
+	// First thread gets the leftover requests
+	if (td->id == 0)
 		req += td->w->request_count % td->w->thread_count;
+	else
+		addr += td->w->request_count % td->w->thread_count;
+	if (td->id != td->w->thread_count - 1)
+		srand48_r(td->seed, &td->rand_data);
 
 	long compr_rand;
 	unsigned char compr;
@@ -98,10 +101,12 @@ static void *run_thread(void *tdata)
 	struct thread_data *td = tdata;
 
 	uint_least64_t req = td->w->request_count / td->w->thread_count;
-	if (td->id)
-		srand48_r(td->seed, &td->rand_data);
-	else // Thread 0 gets the leftover requests since it always exists
+
+	// First thread gets the leftover requests
+	if (td->id == 0)
 		req += td->w->request_count % td->w->thread_count;
+	if (td->id != td->w->thread_count - 1)
+		srand48_r(td->seed, &td->rand_data);
 
 	long op_rand, addr_rand;
 	_Bool write;
@@ -181,27 +186,27 @@ void populate_store(const struct workload *w)
 	if (w->thread_count > 1)
 		threads = malloc((sizeof *threads) * (w->thread_count - 1));
 
-	td->seed = -2091457876;
-	srand48_r(td->seed, &td->rand_data);
-	struct test_timer t = start_timer();
+	const unsigned last_thread = w->thread_count - 1;
+	td[last_thread].seed = -2091457876; // Arbitrary initial seed
+	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
+	struct test_timer t = start_timer();
 	for (unsigned i = 0; i < w->thread_count; ++i) {
 		td[i].id = i;
 		td[i].w = w;
 		td[i].write_data = write_data;
 		td[i].compr_count = compr_count;
-		if (i) {
+		if (i != last_thread) {
 			// Give each thread a different random seed
-			mrand48_r(&td->rand_data, &td[i].seed);
-			pthread_create(threads + i - 1, NULL, populate_thread,
-				       td + i);
+			mrand48_r(&td[last_thread].rand_data, &td[i].seed);
+			pthread_create(threads + i, NULL, pop_thread, td + i);
 		}
 	}
-	populate_thread(td);
-	for (unsigned i = 1; i < w->thread_count; ++i)
-		pthread_join(threads[i - 1], NULL);
-
+	pop_thread(td + last_thread);
+	for (unsigned i = 0; i < last_thread; ++i)
+		pthread_join(threads[i], NULL);
 	stop_timer(&t);
+
 	free(threads);
 	free(td);
 	for (unsigned char i = 0; i < compr_count; ++i)
@@ -234,28 +239,28 @@ void run_workload(const struct workload *w)
 	if (w->thread_count > 1)
 		threads = malloc((sizeof *threads) * (w->thread_count - 1));
 
-	td->seed = -613048132; // Arbitrary initial seed
-	srand48_r(td->seed, &td->rand_data);
-	struct test_timer t = start_timer();
+	const unsigned last_thread = w->thread_count - 1;
+	td[last_thread].seed = -613048132; // Arbitrary initial seed
+	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
+	struct test_timer t = start_timer();
 	for (unsigned i = 0; i < w->thread_count; ++i) {
 		td[i].id = i;
 		td[i].w = w;
 		td[i].read_buf = malloc(read_buf_size);
 		td[i].write_data = write_data;
 		td[i].compr_count = compr_count;
-		if (i) {
+		if (i != last_thread) {
 			// Give each thread a different random seed
-			mrand48_r(&td->rand_data, &td[i].seed);
-			pthread_create(threads + i - 1, NULL, run_thread,
-				       td + i);
+			mrand48_r(&td[last_thread].rand_data, &td[i].seed);
+			pthread_create(threads + i, NULL, run_thread, td + i);
 		}
 	}
-	run_thread(td);
-	for (unsigned i = 1; i < w->thread_count; ++i)
-		pthread_join(threads[i - 1], NULL);
-
+	run_thread(td + last_thread);
+	for (unsigned i = 0; i < last_thread; ++i)
+		pthread_join(threads[i], NULL);
 	stop_timer(&t);
+
 	free(threads);
 	for (unsigned i = 0; i < w->thread_count; ++i)
 		free(td[i].read_buf);
