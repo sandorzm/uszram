@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "test-utils.h"
+
 
 struct rw_workload {
 	unsigned char   percent_blks;
@@ -21,8 +23,8 @@ struct workload {
 	struct rw_workload  read, write;
 };
 
-void populate_store(const struct workload *w);
-void run_workload(const struct workload *w);
+void populate_store(const struct workload *w, struct test_timer *t);
+void run_workload(const struct workload *w, struct test_timer *t);
 
 
 #endif // WORKLOAD_H

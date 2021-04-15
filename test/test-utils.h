@@ -10,9 +10,10 @@
 struct test_timer {
 	struct timespec  start,     end;
 	clock_t          cpu_start, cpu_end;
+	double           real_sec,  cpu_sec;
 };
 
-struct test_timer start_timer(void);
+void start_timer(struct test_timer *t);
 void stop_timer(struct test_timer *t);
 
 void print_stats(int indent);

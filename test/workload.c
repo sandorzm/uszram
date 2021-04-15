@@ -4,7 +4,6 @@
 #include <pthread.h>
 
 #include "workload.h"
-#include "test-utils.h"
 #include "../uszram.h"
 
 
@@ -166,7 +165,7 @@ static inline void get_write_data(size_t buf_size, char buf[static buf_size],
 	fclose(data);
 }
 
-void populate_store(const struct workload *w)
+void populate_store(const struct workload *w, struct test_timer *t)
 {
 	if (!valid_compr(w->compr_min, w->compr_max) || w->thread_count == 0)
 		return;
@@ -190,7 +189,7 @@ void populate_store(const struct workload *w)
 	td[last_thread].seed = -2091457876; // Arbitrary initial seed
 	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
-	struct test_timer t = start_timer();
+	start_timer(t);
 	for (unsigned i = 0; i < w->thread_count; ++i) {
 		td[i].id = i;
 		td[i].w = w;
@@ -205,7 +204,7 @@ void populate_store(const struct workload *w)
 	pop_thread(td + last_thread);
 	for (unsigned i = 0; i < last_thread; ++i)
 		pthread_join(threads[i], NULL);
-	stop_timer(&t);
+	stop_timer(t);
 
 	free(threads);
 	free(td);
@@ -214,7 +213,7 @@ void populate_store(const struct workload *w)
 	free(write_data);
 }
 
-void run_workload(const struct workload *w)
+void run_workload(const struct workload *w, struct test_timer *t)
 {
 	if (!valid_workload(w))
 		return;
@@ -243,7 +242,7 @@ void run_workload(const struct workload *w)
 	td[last_thread].seed = -613048132; // Arbitrary initial seed
 	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
-	struct test_timer t = start_timer();
+	start_timer(t);
 	for (unsigned i = 0; i < w->thread_count; ++i) {
 		td[i].id = i;
 		td[i].w = w;
@@ -259,7 +258,7 @@ void run_workload(const struct workload *w)
 	run_thread(td + last_thread);
 	for (unsigned i = 0; i < last_thread; ++i)
 		pthread_join(threads[i], NULL);
-	stop_timer(&t);
+	stop_timer(t);
 
 	free(threads);
 	for (unsigned i = 0; i < w->thread_count; ++i)

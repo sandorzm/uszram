@@ -10,26 +10,44 @@
 #include "test/workload.h"
 #include "test/test-utils.h"
 
-void run_varying_threads(struct workload *w, unsigned max_threads, int indent)
+
+static inline void print_timer(struct test_timer *t, _Bool raw)
+{
+	if (raw)
+		printf("%.4f,%.4f\n", t->real_sec, t->cpu_sec);
+	else
+		printf("%.4f s real time, %.4f s CPU time\n",
+		       t->real_sec, t->cpu_sec);
+}
+
+static inline void run_varying_threads(struct workload *w,
+				       struct test_timer *t,
+				       unsigned max_threads, int indent,
+				       _Bool raw)
 {
 	if (max_threads == 0)
 		return;
 	unsigned copy = max_threads;
-	unsigned char max_digits = 1;
+	++indent;
 	while (copy /= 10)
-		++max_digits;
+		++indent;
 	for (unsigned i = 1; i <= max_threads; ++i) {
 		w->thread_count = i;
-		if (i == 1)
-			printf("%*u thread : ", indent + max_digits, i);
+		run_workload(w, t);
+		if (!raw)
+			printf("%*u thread%s: ", indent, i,
+			       i == 1 ? " " : "s");
 		else
-			printf("%*u threads: ", indent + max_digits, i);
-		run_workload(w);
+			printf("%u,", i);
+		print_timer(t, raw);
 	}
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+	_Bool raw = argc > 1;
+	(void)argv;
+
 	// small-test.h
 	run_small_tests();
 
@@ -52,6 +70,7 @@ int main(void)
 		.write = {.pgblk_group = {1, 2}},
 	};
 
+	struct test_timer t;
 	const unsigned char blks  [] = {0, 100},
 			    writes[] = {0, 50, 100},
 			    comprs[] = {1, 2, 4};
@@ -59,31 +78,40 @@ int main(void)
 	       "USZRAM_PG_PER_LOCK: %4u\n\n",
 	       USZRAM_PAGE_SIZE, USZRAM_PG_PER_LOCK);
 
-	for (unsigned char b = 0; b < sizeof blks; ++b) {
-		printf("%u%% block operations:\n", blks[b]);
-		work.read.percent_blks = work.write.percent_blks = blks[b];
+	for (unsigned char c = 0; c < sizeof comprs; ++c) {
+		printf("Compressibility %u to %u:\n",
+		       comprs[c],
+		       comprs[c] + 1);
+		pop.compr_min = work.compr_min = comprs[c];
+		pop.compr_max = work.compr_max = comprs[c] + 1;
+		if (!raw)
+			printf("Populating: ");
 
-		for (unsigned char w = 0; w < sizeof writes; ++w) {
-			printf("  %u%% writes:\n", writes[w]);
-			work.percent_writes = writes[w];
+		uszram_init();
+		populate_store(&pop, &t);
 
-			for (unsigned char c = 0; c < sizeof comprs; ++c) {
-				printf("    Compressibility %u to %u:\n",
-				       comprs[c], comprs[c] + 1);
-				pop.compr_min = work.compr_min = comprs[c];
-				pop.compr_max = work.compr_max = comprs[c] + 1;
-				printf("      Populating: ");
+		print_timer(&t, raw);
+		if (!raw)
+			print_stats(0);
+		printf("\n");
 
-				uszram_init();
-				populate_store(&pop);
-				printf("      Stats:\n");
-				print_stats(8);
-				printf("      Running:\n");
-				run_varying_threads(&work, 8, 8);
+		for (unsigned char b = 0; b < sizeof blks; ++b) {
+			printf("  %u%% block operations:\n", blks[b]);
+			work.read.percent_blks = work.write.percent_blks
+				= blks[b];
+
+			for (unsigned char w = 0; w < sizeof writes; ++w) {
+				printf("    %u%% writes:\n", writes[w]);
+				work.percent_writes = writes[w];
+				if (raw)
+					printf("Thread count,Real time (s)"
+					       ",CPU time (s)\n");
+				run_varying_threads(&work, &t, 4, 6, raw);
 				printf("\n");
-				uszram_exit();
 			}
 		}
+
+		uszram_exit();
 	}
 
 	return 0;
