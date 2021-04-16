@@ -3,7 +3,7 @@
 
 
 #include "../compr-api.h"
-// #include "zapi/src/zapi.h"
+#include "../../zapi/src/zapi.h"
 
 
 inline static _Bool is_huge(struct page *pg)
@@ -13,7 +13,8 @@ inline static _Bool is_huge(struct page *pg)
 
 inline static size_type get_size(struct page *pg)
 {
-	return is_huge(pg) ? USZRAM_PAGE_SIZE : zapi_get_size(pg->data);
+	return is_huge(pg) ? USZRAM_PAGE_SIZE
+			   : zapi_page_size((BYTE *)pg->data);
 }
 
 inline static size_type get_size_primary(struct page *pg)
@@ -23,7 +24,9 @@ inline static size_type get_size_primary(struct page *pg)
 
 inline static size_type free_reachable(struct page *pg)
 {
-	return zapi_free(pg->data);
+	size_type old_size = zapi_page_size((BYTE *)pg->data);
+	zapi_free_page((BYTE *)pg->data);
+	return old_size - zapi_page_size((BYTE *)pg->data);
 }
 
 inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
