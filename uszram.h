@@ -21,7 +21,7 @@
  */
 #define USZRAM_BLOCK_SHIFT  9u
 #define USZRAM_PAGE_SHIFT  12u
-#define USZRAM_BLOCK_COUNT (1u << 18)
+#define USZRAM_BLOCK_COUNT (1u << 23)
 
 /* Change the next 3 definitions to select the memory allocator and compressor.
  *

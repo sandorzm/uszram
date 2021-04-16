@@ -5,20 +5,11 @@
 #include <inttypes.h>
 
 #include "uszram.h"
-#include "test/small-test.h"
-#include "test/large-test.h"
+//#include "test/small-test.h"
+//#include "test/large-test.h"
 #include "test/workload.h"
 #include "test/test-utils.h"
 
-
-static inline void print_timer(struct test_timer *t, _Bool raw)
-{
-	if (raw)
-		printf("%.4f,%.4f\n", t->real_sec, t->cpu_sec);
-	else
-		printf("%.4f s real time, %.4f s CPU time\n",
-		       t->real_sec, t->cpu_sec);
-}
 
 static inline void run_varying_threads(struct workload *w,
 				       struct test_timer *t,
@@ -27,19 +18,21 @@ static inline void run_varying_threads(struct workload *w,
 {
 	if (max_threads == 0)
 		return;
-	unsigned copy = max_threads;
-	++indent;
-	while (copy /= 10)
+	if (!raw) {
+		unsigned copy = max_threads;
 		++indent;
+		while (copy /= 10)
+			++indent;
+	}
 	for (unsigned i = 1; i <= max_threads; ++i) {
 		w->thread_count = i;
 		run_workload(w, t);
 		if (!raw)
-			printf("%*u thread%s: ", indent, i,
-			       i == 1 ? " " : "s");
+			printf("%*u thread%s: %.4f s real time, "
+			       "%.4f s CPU time\n", indent, i,
+			       i == 1 ? " " : "s", t->real_sec, t->cpu_sec);
 		else
-			printf("%u,", i);
-		print_timer(t, raw);
+			printf("%u,%.4f,%.4f\n", i, t->real_sec, t->cpu_sec);
 	}
 }
 
@@ -48,10 +41,10 @@ int main(int argc, char **argv)
 	_Bool raw = argc > 1;
 	(void)argv;
 
+	/*
+
 	// small-test.h
 	run_small_tests();
-
-	/*
 
 	// large-test.h
 	many_pgs_test(1, 1u << 15, 4096);
@@ -62,10 +55,10 @@ int main(int argc, char **argv)
 	// workload.h
 	struct workload pop = {
 		.request_count = USZRAM_PAGE_COUNT,
-		.thread_count = 8,
+		.thread_count = 16,
 	};
 	struct workload work = {
-		.request_count = 2 * USZRAM_PAGE_COUNT,
+		.request_count = USZRAM_PAGE_COUNT,
 		.read = {.pgblk_group = {1, 2}},
 		.write = {.pgblk_group = {1, 2}},
 	};
@@ -90,10 +83,14 @@ int main(int argc, char **argv)
 		uszram_init();
 		populate_store(&pop, &t);
 
-		print_timer(&t, raw);
-		if (!raw)
+		if (raw) {
+			printf("%.4f,%.4f\n\n", t.real_sec, t.cpu_sec);
+		} else {
+			printf("%.4f s real time, %.4f s CPU time\n",
+			       t.real_sec, t.cpu_sec);
 			print_stats(0);
-		printf("\n");
+			printf("\n");
+		}
 
 		for (unsigned char b = 0; b < sizeof blks; ++b) {
 			printf("  %u%% block operations:\n", blks[b]);
@@ -106,7 +103,7 @@ int main(int argc, char **argv)
 				if (raw)
 					printf("Thread count,Real time (s)"
 					       ",CPU time (s)\n");
-				run_varying_threads(&work, &t, 4, 6, raw);
+				run_varying_threads(&work, &t, 16, 6, raw);
 				printf("\n");
 			}
 		}
