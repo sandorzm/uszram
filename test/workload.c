@@ -38,10 +38,10 @@ static const uint_least64_t uszram_counts[2] = {
 };
 
 static inline void call_read_fn(const struct thread_data *td,
-				uint_least32_t op_rand,
-				uint_least32_t addr_rand)
+				unsigned long op_rand,
+				unsigned long addr_rand)
 {
-	const _Bool blk = (op_rand % 100 < td->w->read.percent_blks);
+	const _Bool blk = op_rand % 100 < td->w->read.percent_blks;
 	const uint_least32_t count = td->w->read.pgblk_group[blk];
 	const uint_least64_t max_count = uszram_counts[blk] - count + 1;
 	const uint_least32_t addr = addr_rand % max_count;
@@ -49,17 +49,17 @@ static inline void call_read_fn(const struct thread_data *td,
 }
 
 static inline void call_write_fn(struct thread_data *td,
-				 uint_least32_t op_rand,
-				 uint_least32_t addr_rand)
+				 unsigned long op_rand,
+				 unsigned long addr_rand)
 {
 	long compr_rand;
 	mrand48_r(&td->rand_data, &compr_rand);
-	const _Bool blk = (op_rand % 100 < td->w->write.percent_blks);
+	const _Bool blk = op_rand % 100 < td->w->write.percent_blks;
 
 	const uint_least32_t count = td->w->write.pgblk_group[blk];
 	const uint_least64_t max_count = uszram_counts[blk] - count + 1;
 	const uint_least32_t addr = addr_rand % max_count;
-	const unsigned char compr = (uint_least32_t)compr_rand
+	const unsigned char compr = (unsigned long)compr_rand
 				    % td->compr_count;
 
 	write_fns[blk](addr, count, td->write_data[compr]);
@@ -77,9 +77,9 @@ static void *pop_thread(void *tdata)
 
 	// First thread gets the leftover requests
 	if (td->id == 0)
-		req += td->w->request_count % td->w->thread_count;
+		req += pg_count % td->w->thread_count;
 	else
-		addr += td->w->request_count % td->w->thread_count;
+		addr += pg_count % td->w->thread_count;
 	if (td->id != td->w->thread_count - 1)
 		srand48_r(td->seed, &td->rand_data);
 
@@ -88,7 +88,7 @@ static void *pop_thread(void *tdata)
 
 	for (uint_least64_t i = 0; i < req; ++i) {
 		mrand48_r(&td->rand_data, &compr_rand);
-		compr = (uint_least32_t)compr_rand % td->compr_count;
+		compr = (unsigned long)compr_rand % td->compr_count;
 		uszram_write_pg(addr + i, 1, td->write_data[compr]);
 	}
 	return NULL;
@@ -112,7 +112,7 @@ static void *run_thread(void *tdata)
 
 	for (uint_least64_t i = 0; i < req; ++i) {
 		mrand48_r(&td->rand_data, &op_rand);
-		write = (op_rand % 100 < td->w->percent_writes);
+		write = (unsigned long)op_rand % 100 < td->w->percent_writes;
 		mrand48_r(&td->rand_data, &op_rand);
 		mrand48_r(&td->rand_data, &addr_rand);
 		if (write)

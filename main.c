@@ -58,9 +58,9 @@ int main(int argc, char **argv)
 		.thread_count = 16,
 	};
 	struct workload work = {
-		.request_count = USZRAM_PAGE_COUNT,
-		.read = {.pgblk_group = {1, 2}},
-		.write = {.pgblk_group = {1, 2}},
+		.request_count = 1ul << 24,
+		.read = {.pgblk_group = {1, 1}},
+		.write = {.pgblk_group = {1, 1}},
 	};
 
 	struct test_timer t;
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 				if (raw)
 					printf("Thread count,Real time (s)"
 					       ",CPU time (s)\n");
-				run_varying_threads(&work, &t, 16, 6, raw);
+				run_varying_threads(&work, &t, 1, 6, raw);
 				printf("\n");
 			}
 		}
