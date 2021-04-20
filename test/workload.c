@@ -1,10 +1,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
+#include <inttypes.h>
 
 #include "workload.h"
 #include "../uszram.h"
+
+#ifdef USZRAM_STD_MTX
+#  include <threads.h>
+#  define THREAD_CREATE(thr, func, arg) thrd_create(thr, func, arg)
+#  define THREAD_JOIN(thr) thrd_join(thr, NULL)
+   typedef thrd_t  thread_type;
+   typedef int     thread_ret;
+#else
+#  include <pthread.h>
+#  define THREAD_CREATE(thr, func, arg) pthread_create(thr, NULL, func, arg)
+#  define THREAD_JOIN(thr) pthread_join(thr, NULL)
+   typedef pthread_t  thread_type;
+   typedef void      *thread_ret;
+#endif
 
 
 struct thread_data {
@@ -54,73 +68,14 @@ static inline void call_write_fn(struct thread_data *td,
 {
 	long compr_rand;
 	mrand48_r(&td->rand_data, &compr_rand);
-	const _Bool blk = op_rand % 100 < td->w->write.percent_blks;
-
-	const uint_least32_t count = td->w->write.pgblk_group[blk];
-	const uint_least64_t max_count = uszram_counts[blk] - count + 1;
-	const uint_least32_t addr = addr_rand % max_count;
 	const unsigned char compr = (unsigned long)compr_rand
 				    % td->compr_count;
 
+	const _Bool blk = op_rand % 100 < td->w->write.percent_blks;
+	const uint_least32_t count = td->w->write.pgblk_group[blk];
+	const uint_least64_t max_count = uszram_counts[blk] - count + 1;
+	const uint_least32_t addr = addr_rand % max_count;
 	write_fns[blk](addr, count, td->write_data[compr]);
-}
-
-static void *pop_thread(void *tdata)
-{
-	struct thread_data *const td = tdata;
-
-	uint_least64_t pg_count = td->w->request_count;
-	if (pg_count > USZRAM_PAGE_COUNT)
-		pg_count = USZRAM_PAGE_COUNT;
-	uint_least64_t req = pg_count / td->w->thread_count;
-	uint_least32_t addr = req * td->id;
-
-	// First thread gets the leftover requests
-	if (td->id == 0)
-		req += pg_count % td->w->thread_count;
-	else
-		addr += pg_count % td->w->thread_count;
-	if (td->id != td->w->thread_count - 1)
-		srand48_r(td->seed, &td->rand_data);
-
-	long compr_rand;
-	unsigned char compr;
-
-	for (uint_least64_t i = 0; i < req; ++i) {
-		mrand48_r(&td->rand_data, &compr_rand);
-		compr = (unsigned long)compr_rand % td->compr_count;
-		uszram_write_pg(addr + i, 1, td->write_data[compr]);
-	}
-	return NULL;
-}
-
-// Contains code common to both reading and writing
-static void *run_thread(void *tdata)
-{
-	struct thread_data *td = tdata;
-
-	uint_least64_t req = td->w->request_count / td->w->thread_count;
-
-	// First thread gets the leftover requests
-	if (td->id == 0)
-		req += td->w->request_count % td->w->thread_count;
-	if (td->id != td->w->thread_count - 1)
-		srand48_r(td->seed, &td->rand_data);
-
-	long op_rand, addr_rand;
-	_Bool write;
-
-	for (uint_least64_t i = 0; i < req; ++i) {
-		mrand48_r(&td->rand_data, &op_rand);
-		write = (unsigned long)op_rand % 100 < td->w->percent_writes;
-		mrand48_r(&td->rand_data, &op_rand);
-		mrand48_r(&td->rand_data, &addr_rand);
-		if (write)
-			call_write_fn(td, op_rand, addr_rand);
-		else
-			call_read_fn(td, op_rand, addr_rand);
-	}
-	return NULL;
 }
 
 static inline size_t buf_size(struct rw_workload rw)
@@ -154,38 +109,118 @@ static inline _Bool valid_workload(const struct workload *w)
 	return 1;
 }
 
-static inline void get_write_data(size_t buf_size, char buf[static buf_size],
-				  unsigned char compr)
+static inline int get_write_data(size_t buf_size, char buf[static buf_size],
+				 unsigned char compr)
 {
 	// Max length 16, plus null terminator: "data/cr11-12.raw"
 	char filename[17] = "data/cr";
-	snprintf(filename + 7, 10, "%i-%i.raw", compr, compr + 1);
+	snprintf(filename + 7, 10, "%hhu-%u.raw", compr, compr + 1u);
 	FILE *data = fopen(filename, "r");
-	fread(buf, 1, buf_size, data);
+	if (data == NULL) {
+		PRINT_ERROR("Can't open %s\n", filename);
+		return -1;
+	}
+	size_t ret = fread(buf, 1, buf_size, data);
 	fclose(data);
+	if (ret != buf_size) {
+		PRINT_ERROR("Error reading %s\n", filename);
+		return -1;
+	}
+	return 0;
+}
+
+static thread_ret pop_thread(void *tdata)
+{
+	struct thread_data *const td = tdata;
+	uint_least64_t pg_count = td->w->request_count;
+	if (pg_count > USZRAM_PAGE_COUNT)
+		pg_count = USZRAM_PAGE_COUNT;
+	uint_least64_t req = pg_count / td->w->thread_count;
+	uint_least32_t addr = req * td->id;
+
+	// First thread gets the leftover requests
+	if (td->id == 0)
+		req += pg_count % td->w->thread_count;
+	else
+		addr += pg_count % td->w->thread_count;
+
+	long compr_rand;
+	unsigned char compr;
+	for (uint_least64_t i = 0; i < req; ++i) {
+		mrand48_r(&td->rand_data, &compr_rand);
+		compr = (unsigned long)compr_rand % td->compr_count;
+		uszram_write_pg(addr + i, 1, td->write_data[compr]);
+	}
+	return 0;
+}
+
+// Contains code common to both reading and writing
+static thread_ret run_thread(void *tdata)
+{
+	struct thread_data *const td = tdata;
+	uint_least64_t req = td->w->request_count / td->w->thread_count;
+
+	// First thread gets the leftover requests
+	if (td->id == 0)
+		req += td->w->request_count % td->w->thread_count;
+
+	long op_rand, addr_rand;
+	_Bool write;
+	for (uint_least64_t i = 0; i < req; ++i) {
+		mrand48_r(&td->rand_data, &op_rand);
+		write = (unsigned long)op_rand % 100 < td->w->percent_writes;
+		mrand48_r(&td->rand_data, &op_rand);
+		mrand48_r(&td->rand_data, &addr_rand);
+		if (write)
+			call_write_fn(td, op_rand, addr_rand);
+		else
+			call_read_fn(td, op_rand, addr_rand);
+	}
+	return 0;
 }
 
 void populate_store(const struct workload *w, struct test_timer *t)
 {
-	if (!valid_compr(w->compr_min, w->compr_max) || w->thread_count == 0)
+	if (!valid_compr(w->compr_min, w->compr_max) || w->thread_count == 0) {
+		PRINT_ERROR("Invalid workload\n");
 		return;
-	if (USZRAM_PAGE_SIZE > 4096)
+	} else if (USZRAM_PAGE_SIZE > 4096) {
+		PRINT_ERROR("Page size > 4096 bytes: %u\n", USZRAM_PAGE_SIZE);
 		return; // Data files are only 4096 bytes
-
-	const unsigned char compr_count = w->compr_max - w->compr_min;
-	char **const write_data = malloc((sizeof *write_data) * compr_count);
-	for (unsigned char i = 0; i < compr_count; ++i) {
-		write_data[i] = malloc(USZRAM_PAGE_SIZE);
-		get_write_data(USZRAM_PAGE_SIZE, write_data[i],
-			       w->compr_min + i);
 	}
 
-	struct thread_data *const td = malloc((sizeof *td) * w->thread_count);
-	pthread_t *threads = NULL;
-	if (w->thread_count > 1)
-		threads = malloc((sizeof *threads) * (w->thread_count - 1));
+	unsigned char compr_count = w->compr_max - w->compr_min;
+	char **const write_data = malloc((sizeof *write_data) * compr_count);
+	if (write_data == NULL) {
+		PRINT_ERROR("malloc ran out of memory\n");
+		return;
+	}
+	for (unsigned char i = 0; i < compr_count; ++i) {
+		write_data[i] = malloc(USZRAM_PAGE_SIZE);
+		if (write_data[i] == NULL)
+			PRINT_ERROR("malloc ran out of memory\n");
+		else if (!get_write_data(USZRAM_PAGE_SIZE, write_data[i],
+					 w->compr_min + i))
+			continue;
+		compr_count = i + 1;
+		goto out_write_data;
+	}
 
-	const unsigned last_thread = w->thread_count - 1;
+	unsigned last_thread = w->thread_count - 1;
+	thread_type *threads = NULL;
+	if (last_thread > 0) {
+		threads = malloc((sizeof *threads) * last_thread);
+		if (threads == NULL) {
+			PRINT_ERROR("malloc ran out of memory\n");
+			goto out_threads;
+		}
+	}
+	struct thread_data *const td = malloc((sizeof *td) * w->thread_count);
+	if (td == NULL) {
+		PRINT_ERROR("malloc ran out of memory\n");
+		goto out_threads;
+	}
+
 	td[last_thread].seed = -2091457876; // Arbitrary initial seed
 	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
@@ -198,16 +233,19 @@ void populate_store(const struct workload *w, struct test_timer *t)
 		if (i != last_thread) {
 			// Give each thread a different random seed
 			mrand48_r(&td[last_thread].rand_data, &td[i].seed);
-			pthread_create(threads + i, NULL, pop_thread, td + i);
+			srand48_r(td[i].seed, &td[i].rand_data);
+			THREAD_CREATE(threads + i, pop_thread, td + i);
 		}
 	}
 	pop_thread(td + last_thread);
 	for (unsigned i = 0; i < last_thread; ++i)
-		pthread_join(threads[i], NULL);
+		THREAD_JOIN(threads[i]);
 	stop_timer(t);
 
-	free(threads);
 	free(td);
+out_threads:
+	free(threads);
+out_write_data:
 	for (unsigned char i = 0; i < compr_count; ++i)
 		free(write_data[i]);
 	free(write_data);
@@ -215,30 +253,52 @@ void populate_store(const struct workload *w, struct test_timer *t)
 
 void run_workload(const struct workload *w, struct test_timer *t)
 {
-	if (!valid_workload(w))
+	if (!valid_workload(w)) {
+		PRINT_ERROR("Invalid workload\n");
 		return;
+	}
 
 	// Make read_buf and write_data large enough for either a page group or
 	// a block group
 	const size_t read_buf_size  = buf_size(w->read),
 		     write_buf_size = buf_size(w->write);
-	if (write_buf_size > 4096)
+	if (write_buf_size > 4096) {
+		PRINT_ERROR("Write group > 4096 bytes: %zu\n", write_buf_size);
 		return; // Data files are only 4096 bytes
-
-	const unsigned char compr_count = w->compr_max - w->compr_min;
-	char **const write_data = malloc((sizeof *write_data) * compr_count);
-	for (unsigned char i = 0; i < compr_count; ++i) {
-		write_data[i] = malloc(write_buf_size);
-		get_write_data(write_buf_size, write_data[i],
-			       w->compr_min + i);
 	}
 
-	struct thread_data *const td = malloc((sizeof *td) * w->thread_count);
-	pthread_t *threads = NULL;
-	if (w->thread_count > 1)
-		threads = malloc((sizeof *threads) * (w->thread_count - 1));
+	unsigned char compr_count = w->compr_max - w->compr_min;
+	char **const write_data = malloc((sizeof *write_data) * compr_count);
+	if (write_data == NULL) {
+		PRINT_ERROR("malloc ran out of memory\n");
+		return;
+	}
+	for (unsigned char i = 0; i < compr_count; ++i) {
+		write_data[i] = malloc(write_buf_size);
+		if (write_data[i] == NULL)
+			PRINT_ERROR("malloc ran out of memory\n");
+		else if (!get_write_data(write_buf_size, write_data[i],
+					 w->compr_min + i))
+			continue;
+		compr_count = i + 1;
+		goto out_write_data;
+	}
 
-	const unsigned last_thread = w->thread_count - 1;
+	unsigned last_thread = w->thread_count - 1;
+	thread_type *threads = NULL;
+	if (last_thread > 0) {
+		threads = malloc((sizeof *threads) * last_thread);
+		if (threads == NULL) {
+			PRINT_ERROR("malloc ran out of memory\n");
+			goto out_threads;
+		}
+	}
+	struct thread_data *const td = malloc((sizeof *td) * w->thread_count);
+	if (td == NULL) {
+		PRINT_ERROR("malloc ran out of memory\n");
+		goto out_threads;
+	}
+
 	td[last_thread].seed = -613048132; // Arbitrary initial seed
 	srand48_r(td[last_thread].seed, &td[last_thread].rand_data);
 
@@ -247,23 +307,32 @@ void run_workload(const struct workload *w, struct test_timer *t)
 		td[i].id = i;
 		td[i].w = w;
 		td[i].read_buf = malloc(read_buf_size);
+		if (td[i].read_buf == NULL) {
+			PRINT_ERROR("malloc ran out of memory\n");
+			last_thread = i;
+			goto out_join;
+		}
 		td[i].write_data = write_data;
 		td[i].compr_count = compr_count;
 		if (i != last_thread) {
 			// Give each thread a different random seed
 			mrand48_r(&td[last_thread].rand_data, &td[i].seed);
-			pthread_create(threads + i, NULL, run_thread, td + i);
+			srand48_r(td[i].seed, &td[i].rand_data);
+			THREAD_CREATE(threads + i, run_thread, td + i);
 		}
 	}
 	run_thread(td + last_thread);
+out_join:
 	for (unsigned i = 0; i < last_thread; ++i)
-		pthread_join(threads[i], NULL);
+		THREAD_JOIN(threads[i]);
 	stop_timer(t);
 
-	free(threads);
-	for (unsigned i = 0; i < w->thread_count; ++i)
+	for (unsigned i = 0; i <= last_thread; ++i)
 		free(td[i].read_buf);
 	free(td);
+out_threads:
+	free(threads);
+out_write_data:
 	for (unsigned char i = 0; i < compr_count; ++i)
 		free(write_data[i]);
 	free(write_data);

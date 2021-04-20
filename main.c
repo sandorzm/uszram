@@ -1,5 +1,5 @@
 /* COMPILE:
- * clang main.c uszram.c -llz4 [-ljemalloc] -lpthread [-ldl -lm -static]
+ * cc -pthread main.c uszram.c ... -llz4 -ljemalloc [-ldl -lm -static]
  */
 #include <stdio.h>
 #include <inttypes.h>
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
 
 	struct test_timer t;
 	const unsigned char blks  [] = {0, 100},
-			    writes[] = {0, 50, 100},
+			    writes[] = {0, 100},
 			    comprs[] = {1, 2, 4};
 	printf("USZRAM_PAGE_SIZE:   %4u\n"
 	       "USZRAM_PG_PER_LOCK: %4u\n\n",
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 	for (unsigned char c = 0; c < sizeof comprs; ++c) {
 		printf("Compressibility %u to %u:\n",
 		       comprs[c],
-		       comprs[c] + 1);
+		       comprs[c] + 1u);
 		pop.compr_min = work.compr_min = comprs[c];
 		pop.compr_max = work.compr_max = comprs[c] + 1;
 		if (!raw)

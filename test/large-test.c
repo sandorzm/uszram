@@ -47,7 +47,7 @@ void many_pgs_test(uint_least32_t pg_group, uint_least32_t num_pg_grp,
 
 	printf("Stored %"PRIuLEAST32" groups of %"PRIuLEAST32
 	       " pages in %.4f s\n", num_pg_grp, pg_group, duration);
-	print_stats();
+	print_stats(0);
 	assert_equal(pg_group * num_pg_grp, uszram_pages_stored());
 
 	timespec_get(&start, TIME_UTC);
@@ -99,7 +99,7 @@ void many_blks_test(uint_least32_t blk_group, uint_least32_t num_blk_grp,
 
 	printf("Stored %"PRIuLEAST32" groups of %"PRIuLEAST32
 	       " blocks in %.4f s\n", num_blk_grp, blk_group, duration);
-	print_stats();
+	print_stats(0);
 	uint_least64_t blocks = blk_group * num_blk_grp;
 	uint_least64_t pages
 		= blocks / USZRAM_BLK_PER_PG

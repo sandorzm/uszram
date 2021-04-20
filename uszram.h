@@ -19,9 +19,9 @@
  * USZRAM_BLOCK_COUNT is the number of logical blocks in the store. It must be
  * at least 1 and at most (1ull << 32).
  */
-#define USZRAM_BLOCK_SHIFT  9u
+#define USZRAM_BLOCK_SHIFT  8u
 #define USZRAM_PAGE_SHIFT  12u
-#define USZRAM_BLOCK_COUNT (1u << 23)
+#define USZRAM_BLOCK_COUNT (1ul << 24)
 
 /* Change the next 3 definitions to select the memory allocator and compressor.
  *

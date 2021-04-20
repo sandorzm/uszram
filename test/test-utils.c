@@ -48,7 +48,7 @@ void assert_equal(int expected, int actual)
 	if (expected == actual)
 		return;
 	uszram_exit();
-	fprintf(stderr, "Expected <%i> but was <%i>\n", expected, actual);
+	PRINT_ERROR("Expected %i but was %i\n", expected, actual);
 	exit(EXIT_FAILURE);
 }
 
