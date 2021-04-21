@@ -5,7 +5,6 @@
 #include <inttypes.h>
 
 #include "uszram.h"
-//#include "test/small-test.h"
 //#include "test/large-test.h"
 #include "test/workload.h"
 #include "test/test-utils.h"
@@ -43,9 +42,6 @@ int main(int argc, char **argv)
 
 	/*
 
-	// small-test.h
-	run_small_tests();
-
 	// large-test.h
 	many_pgs_test(1, 1u << 15, 4096);
 	many_blks_test(1, 1u << 18, 512);
@@ -67,9 +63,7 @@ int main(int argc, char **argv)
 	const unsigned char blks  [] = {0, 100},
 			    writes[] = {0, 100},
 			    comprs[] = {1, 2, 4};
-	printf("USZRAM_PAGE_SIZE:   %4u\n"
-	       "USZRAM_PG_PER_LOCK: %4u\n\n",
-	       USZRAM_PAGE_SIZE, USZRAM_PG_PER_LOCK);
+	printf("USZRAM_PAGE_SIZE: %4u\n", USZRAM_PAGE_SIZE);
 
 	for (unsigned char c = 0; c < sizeof comprs; ++c) {
 		printf("Compressibility %u to %u:\n",
