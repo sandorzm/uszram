@@ -56,19 +56,13 @@
 #define USZRAM_MAX_COMPR_FRAC 0.75f
 #define USZRAM_HUGE_WAIT      64u
 
-/* Change the next 2 definitions to configure locking.
- *
- * USZRAM_PG_PER_LOCK adjusts lock granularity for multithreading. It is the
- * maximum number of pages that can be controlled by a single lock. It must be
- * at least 1 and at most (1ull << 32).
- *
- * The second definition sets the lock type:
- * - USZRAM_STD_MTX selects a plain mutex from the C standard library
- * - USZRAM_PTH_MTX selects a plain mutex from the pthread library
- * - USZRAM_PTH_RW selects a readers-writer lock from the pthread library
+/* Each page is controlled by a lock for thread safety. With many pages, threads
+ * are unlikely to conflict, so only unfair spinlocks are supported. Change the
+ * next definition to set the lock type:
+ * - USZRAM_MUTEX selects a mutex
+ * - USZRAM_RWLOCK selects a readers-writer lock
  */
-#define USZRAM_PG_PER_LOCK 4u
-#define USZRAM_PTH_RW
+#define USZRAM_RWLOCK
 
 
 /* Don't change any of the following lines.

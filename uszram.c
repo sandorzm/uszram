@@ -1,5 +1,3 @@
-#include <stdatomic.h>
-
 #include "allocators/uszram-basic.h"
 
 #ifdef USZRAM_LZ4
@@ -8,18 +6,9 @@
 #  include "compressors/uszram-zapi.h"
 #endif
 
-#ifdef USZRAM_PTH_RW
-#  include "locks/uszram-pth-rw.h"
-#elif defined USZRAM_PTH_MTX
-#  include "locks/uszram-pth-mtx.h"
-#else
-#  include "locks/uszram-std-mtx.h"
-#endif
 
-
-static _Atomic _Bool initialized;
+static atomic_bool initialized;
 static struct page pgtbl[USZRAM_PAGE_COUNT];
-static struct lock lktbl[LOCK_COUNT];
 static struct {
 	atomic_uint_least64_t compr_data_size;	// Total heap data except locks
 	atomic_uint_least64_t pages_stored;	// # of pages currently stored
@@ -28,41 +17,21 @@ static struct {
 	atomic_uint_least64_t failed_compr;	// Attempts resulting in huge pages
 } stats;
 
-struct pgloop {
-	const uint_least32_t pg_end, lk_last;
-	uint_least32_t lk_addr;
-};
-
 struct blkloop {
-	const uint_least32_t blk_end, pg_last, lk_last;
-	uint_least32_t pg_addr, lk_addr, pg_next;
+	const uint_least32_t blk_end, pg_last;
+	uint_least32_t pg_addr;
 };
-
-inline static struct pgloop make_pgloop(uint_least32_t pg_addr,
-					uint_least32_t pages)
-{
-	const uint_least32_t pg_end = pg_addr + pages;
-	return (struct pgloop){
-		.pg_end = pg_end,
-		.lk_last = (pg_end - 1u) / PG_PER_LOCK,
-		.lk_addr = pg_addr / PG_PER_LOCK,
-	};
-}
 
 inline static struct blkloop make_blkloop(uint_least32_t blk_addr,
 					  uint_least32_t blocks)
 {
 	const uint_least32_t blk_end = blk_addr + blocks,
 			     pg_last = (blk_end - 1u) / BLK_PER_PG,
-			     pg_addr = blk_addr / BLK_PER_PG,
-			     lk_addr = pg_addr / PG_PER_LOCK;
+			     pg_addr = blk_addr / BLK_PER_PG;
 	return (struct blkloop){
 		.blk_end = blk_end,
 		.pg_last = pg_last,
-		.lk_last = pg_last / PG_PER_LOCK,
 		.pg_addr = pg_addr,
-		.lk_addr = lk_addr,
-		.pg_next = lk_addr * PG_PER_LOCK,
 	};
 }
 
@@ -79,11 +48,9 @@ static void delete_pg(struct page *pg)
 	write_compressed(pg, 0, NULL);
 }
 
-static int read_pg(struct pgloop *l, uint_least32_t pg_addr,
-		   char data[static USZRAM_PAGE_SIZE])
+static int read_pg(uint_least32_t pg_addr, char data[static USZRAM_PAGE_SIZE])
 {
-	struct page *pg = pgtbl + pg_addr;
-	struct lock *lk = lktbl + l->lk_addr;
+	struct page *const pg = pgtbl + pg_addr;
 	int ret = 0;
 
 	if (pg->data == NULL) {
@@ -91,21 +58,20 @@ static int read_pg(struct pgloop *l, uint_least32_t pg_addr,
 		return ret;
 	}
 
-	lock_as_reader(lk);
+	lock_as_reader(&pg->lock);
 	if (is_huge(pg))
 		memcpy(data, pg->data, USZRAM_PAGE_SIZE);
 	else
 		ret = decompress(pg, USZRAM_PAGE_SIZE, data);
-	unlock_as_reader(lk);
+	unlock_as_reader(&pg->lock);
 
 	return ret;
 }
 
-static int read_blk(struct blkloop *l, size_type offset, size_type blocks,
+static int read_blk(uint_least32_t pg_addr, size_type offset, size_type blocks,
 		    char data[static blocks * USZRAM_BLOCK_SIZE])
 {
-	struct page *pg = pgtbl + l->pg_addr;
-	struct lock *lk = lktbl + l->lk_addr;
+	struct page *const pg = pgtbl + pg_addr;
 	offset *= USZRAM_BLOCK_SIZE;
 	blocks *= USZRAM_BLOCK_SIZE;
 	int ret = 0;
@@ -115,7 +81,7 @@ static int read_blk(struct blkloop *l, size_type offset, size_type blocks,
 		return ret;
 	}
 
-	lock_as_reader(lk);
+	lock_as_reader(&pg->lock);
 	if (is_huge(pg)) {
 		memcpy(data, pg->data + offset, blocks);
 	} else {
@@ -124,7 +90,7 @@ static int read_blk(struct blkloop *l, size_type offset, size_type blocks,
 		if (ret >= 0)
 			memcpy(data, raw_pg + offset, blocks);
 	}
-	unlock_as_reader(lk);
+	unlock_as_reader(&pg->lock);
 
 	return ret;
 }
@@ -149,19 +115,18 @@ static size_type write_pg_common(struct page *pg, size_type compr_size,
 	return compr_size;
 }
 
-static size_type write_pg(struct pgloop *l, uint_least32_t pg_addr,
+static size_type write_pg(uint_least32_t pg_addr,
 			  char compr_pg[static MAX_NON_HUGE],
 			  const char data[static USZRAM_PAGE_SIZE])
 {
-	struct page *pg = pgtbl + pg_addr;
-	struct lock *lk = lktbl + l->lk_addr;
+	struct page *const pg = pgtbl + pg_addr;
 	size_type new_size = compress(data, compr_pg);
 	++stats.num_compr;
 
-	lock_as_writer(lk);
+	lock_as_writer(&pg->lock);
 	stats.pages_stored += pg->data == NULL;
 	write_pg_common(pg, new_size, compr_pg, data);
-	unlock_as_writer(lk);
+	unlock_as_writer(&pg->lock);
 
 	return new_size;
 }
@@ -171,20 +136,20 @@ inline static size_type write_blk_helper(
 	char compr_pg[static MAX_NON_HUGE],
 	const char raw_pg[static USZRAM_PAGE_SIZE])
 {
-	size_type new_size = compress(raw_pg, compr_pg);
+	const size_type new_size = compress(raw_pg, compr_pg);
 	++stats.num_compr;
 	return write_pg_common(pg, new_size, compr_pg, raw_pg);
 }
 
-static int write_blk(struct blkloop *l, size_type offset, size_type blocks,
+static int write_blk(uint_least32_t pg_addr, size_type offset,
+		     size_type blocks,
 		     const char data[static blocks * USZRAM_BLOCK_SIZE],
 		     char compr_pg[static MAX_NON_HUGE])
 {
-	struct page *pg = pgtbl + l->pg_addr;
-	struct lock *lk = lktbl + l->lk_addr;
+	struct page *const pg = pgtbl + pg_addr;
 	int ret = 0;
 
-	lock_as_writer(lk);
+	lock_as_writer(&pg->lock);
 	if (pg->data == NULL) {
 		++stats.pages_stored;
 		char raw_pg[USZRAM_PAGE_SIZE] = {0};
@@ -199,7 +164,7 @@ static int write_blk(struct blkloop *l, size_type offset, size_type blocks,
 			ret = write_blk_helper(pg, compr_pg, pg->data);
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
-		int old_size = get_size(pg);
+		const int old_size = get_size(pg);
 		ret = read_modify(pg, offset, blocks, data, raw_pg);
 		switch (ret) {
 		case 1:
@@ -211,21 +176,20 @@ static int write_blk(struct blkloop *l, size_type offset, size_type blocks,
 		}
 	}
 out:
-	unlock_as_writer(lk);
+	unlock_as_writer(&pg->lock);
 	return 0;
 }
 
-static int delete_blk(struct blkloop *l, size_type offset, size_type blocks,
-		      char compr_pg[static MAX_NON_HUGE])
+static int delete_blk(uint_least32_t pg_addr, size_type offset,
+		      size_type blocks, char compr_pg[static MAX_NON_HUGE])
 {
-	struct page *pg = pgtbl + l->pg_addr;
-	struct lock *lk = lktbl + l->lk_addr;
+	struct page *const pg = pgtbl + pg_addr;
 	int ret = 0;
 
 	if (pg->data == NULL)
 		return ret;
 
-	lock_as_writer(lk);
+	lock_as_writer(&pg->lock);
 	if (is_huge(pg)) {
 		switch (read_modify(pg, offset, blocks, NULL, NULL)) {
 		case 2:
@@ -236,7 +200,7 @@ static int delete_blk(struct blkloop *l, size_type offset, size_type blocks,
 		}
 	} else {
 		char raw_pg[USZRAM_PAGE_SIZE];
-		int old_size = get_size(pg);
+		const int old_size = get_size(pg);
 		ret = read_modify(pg, offset, blocks, NULL, raw_pg);
 		switch (ret) {
 		case 2:
@@ -250,25 +214,18 @@ static int delete_blk(struct blkloop *l, size_type offset, size_type blocks,
 			stats.compr_data_size += (int)get_size(pg) - old_size;
 		}
 	}
-	unlock_as_writer(lk);
+	unlock_as_writer(&pg->lock);
 	return ret;
 }
 
 int uszram_delete_all(void)
 {
-	uint_least64_t pg_addr = 0;
-	uint_least32_t pg_next = 0, lk_addr = 0, lk_last = LOCK_COUNT - 1;
-	for (; lk_addr != lk_last; ++lk_addr) {
-		pg_next += PG_PER_LOCK;
-		lock_as_writer(lktbl + lk_addr);
-		for (; pg_addr != pg_next; ++pg_addr)
-			delete_pg(pgtbl + pg_addr);
-		unlock_as_writer(lktbl + lk_addr);
+
+	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i) {
+		lock_as_writer(&pgtbl[i].lock);
+		delete_pg(pgtbl + i);
+		pgtbl[i].lock = 0;
 	}
-	lock_as_writer(lktbl + lk_addr);
-	for (; pg_addr != USZRAM_PAGE_COUNT; ++pg_addr)
-		delete_pg(pgtbl + pg_addr);
-	unlock_as_writer(lktbl + lk_addr);
 	return 0;
 }
 
@@ -276,8 +233,8 @@ int uszram_init(void)
 {
 	if (initialized)
 		return -1;
-	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
-		initialize_lock(lktbl + i);
+	for (uint_least64_t i = 0; i < USZRAM_PAGE_COUNT; ++i)
+		initialize_lock(&pgtbl[i].lock);
 	initialized = 1;
 	return 0;
 }
@@ -287,10 +244,7 @@ int uszram_exit(void)
 	if (!initialized)
 		return -1;
 	initialized = 0;
-	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
-		destroy_lock(lktbl + i);
-	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i)
-		delete_pg(pgtbl + i);
+	uszram_delete_all();
 	stats.num_compr = stats.failed_compr = 0;
 	return 0;
 }
@@ -303,18 +257,9 @@ int uszram_read_pg(uint_least32_t pg_addr, uint_least32_t pages,
 	if ((uint_least64_t)pg_addr + pages > USZRAM_PAGE_COUNT)
 		return -1;
 
-	struct pgloop l = make_pgloop(pg_addr, pages);
-	pages = l.lk_addr * PG_PER_LOCK;
-
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		pages += PG_PER_LOCK;
-		for (; pg_addr != pages; ++pg_addr) {
-			read_pg(&l, pg_addr, data);
-			data += USZRAM_PAGE_SIZE;
-		}
-	}
-	for (; pg_addr != l.pg_end; ++pg_addr) {
-		read_pg(&l, pg_addr, data);
+	const uint_least32_t pg_end = pg_addr + pages;
+	for (; pg_addr != pg_end; ++pg_addr) {
+		read_pg(pg_addr, data);
 		data += USZRAM_PAGE_SIZE;
 	}
 
@@ -330,29 +275,21 @@ int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		return -1;
 
 	struct blkloop l = make_blkloop(blk_addr, blocks);
-	size_type offset = blk_addr % BLK_PER_PG;
+	const size_type offset = blk_addr % BLK_PER_PG;
 	blocks = BLK_PER_PG - offset;
 
 	if (l.pg_addr != l.pg_last) {
-		read_blk(&l, offset, blocks, data);
+		read_blk(l.pg_addr, offset, blocks, data);
 		data += blocks * USZRAM_BLOCK_SIZE;
 		blk_addr += blocks;
 		++l.pg_addr;
 	}
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		l.pg_next += PG_PER_LOCK;
-		for (; l.pg_addr != l.pg_next; ++l.pg_addr) {
-			read_blk(&l, 0, BLK_PER_PG, data);
-			data += USZRAM_PAGE_SIZE;
-			blk_addr += BLK_PER_PG;
-		}
-	}
 	for (; l.pg_addr != l.pg_last; ++l.pg_addr) {
-		read_blk(&l, 0, BLK_PER_PG, data);
+		read_blk(l.pg_addr, 0, BLK_PER_PG, data);
 		data += USZRAM_PAGE_SIZE;
 		blk_addr += BLK_PER_PG;
 	}
-	read_blk(&l, blk_addr % BLK_PER_PG, l.blk_end - blk_addr, data);
+	read_blk(l.pg_addr, blk_addr % BLK_PER_PG, l.blk_end - blk_addr, data);
 
 	return 0;
 
@@ -366,19 +303,10 @@ int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
 	if ((uint_least64_t)pg_addr + pages > USZRAM_PAGE_COUNT)
 		return -1;
 
-	struct pgloop l = make_pgloop(pg_addr, pages);
-	pages = l.lk_addr * PG_PER_LOCK;
-	char compr_pg[MAX_NON_HUGE];
-
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		pages += PG_PER_LOCK;
-		for (; pg_addr != pages; ++pg_addr) {
-			write_pg(&l, pg_addr, compr_pg, data);
-			data += USZRAM_PAGE_SIZE;
-		}
-	}
-	for (; pg_addr != l.pg_end; ++pg_addr) {
-		write_pg(&l, pg_addr, compr_pg, data);
+	const uint_least32_t pg_end = pg_addr + pages;
+	for (; pg_addr != pg_end; ++pg_addr) {
+		char compr_pg[MAX_NON_HUGE];
+		write_pg(pg_addr, compr_pg, data);
 		data += USZRAM_PAGE_SIZE;
 	}
 
@@ -394,30 +322,22 @@ int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		return -1;
 
 	struct blkloop l = make_blkloop(blk_addr, blocks);
-	size_type offset = blk_addr % BLK_PER_PG;
+	const size_type offset = blk_addr % BLK_PER_PG;
 	blocks = BLK_PER_PG - offset;
 	char compr_pg[MAX_NON_HUGE];
 
 	if (l.pg_addr != l.pg_last) {
-		write_blk(&l, offset, blocks, data, compr_pg);
+		write_blk(l.pg_addr, offset, blocks, data, compr_pg);
 		data += blocks * USZRAM_BLOCK_SIZE;
 		blk_addr += blocks;
 		++l.pg_addr;
 	}
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		l.pg_next += PG_PER_LOCK;
-		for (; l.pg_addr != l.pg_next; ++l.pg_addr) {
-			write_blk(&l, 0, BLK_PER_PG, data, compr_pg);
-			data += USZRAM_PAGE_SIZE;
-			blk_addr += BLK_PER_PG;
-		}
-	}
 	for (; l.pg_addr != l.pg_last; ++l.pg_addr) {
-		write_blk(&l, 0, BLK_PER_PG, data, compr_pg);
+		write_blk(l.pg_addr, 0, BLK_PER_PG, data, compr_pg);
 		data += USZRAM_PAGE_SIZE;
 		blk_addr += BLK_PER_PG;
 	}
-	write_blk(&l, blk_addr % BLK_PER_PG, l.blk_end - blk_addr, data,
+	write_blk(l.pg_addr, blk_addr % BLK_PER_PG, l.blk_end - blk_addr, data,
 		  compr_pg);
 
 	return 0;
@@ -430,23 +350,11 @@ int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages)
 	if ((uint_least64_t)pg_addr + pages > USZRAM_PAGE_COUNT)
 		return -1;
 
-	struct pgloop l = make_pgloop(pg_addr, pages);
-	pages = l.lk_addr * PG_PER_LOCK;
-
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		pages += PG_PER_LOCK;
-		for (; pg_addr != pages; ++pg_addr) {
-			/* Could move lock/unlock outside this loop to increase
-			 * speed but also block other threads for longer */
-			lock_as_writer  (lktbl + l.lk_addr);
-			delete_pg       (pgtbl + pg_addr);
-			unlock_as_writer(lktbl + l.lk_addr);
-		}
-	}
-	for (; pg_addr != l.pg_end; ++pg_addr) {
-		lock_as_writer  (lktbl + l.lk_addr);
-		delete_pg       (pgtbl + pg_addr);
-		unlock_as_writer(lktbl + l.lk_addr);
+	const uint_least32_t pg_end = pg_addr + pages;
+	for (; pg_addr != pg_end; ++pg_addr) {
+		lock_as_writer(&pgtbl[pg_addr].lock);
+		delete_pg(pgtbl + pg_addr);
+		pgtbl[pg_addr].lock = 0;
 	}
 
 	return 0;
@@ -465,22 +373,16 @@ int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks)
 	char compr_pg[MAX_NON_HUGE];
 
 	if (l.pg_addr != l.pg_last) {
-		delete_blk(&l, offset, blocks, compr_pg);
+		delete_blk(l.pg_addr, offset, blocks, compr_pg);
 		blk_addr += blocks;
 		++l.pg_addr;
 	}
-	for (; l.lk_addr != l.lk_last; ++l.lk_addr) {
-		l.pg_next += PG_PER_LOCK;
-		for (; l.pg_addr != l.pg_next; ++l.pg_addr) {
-			delete_blk(&l, 0, BLK_PER_PG, compr_pg);
-			blk_addr += BLK_PER_PG;
-		}
-	}
 	for (; l.pg_addr != l.pg_last; ++l.pg_addr) {
-		delete_blk(&l, 0, BLK_PER_PG, compr_pg);
+		delete_blk(l.pg_addr, 0, BLK_PER_PG, compr_pg);
 		blk_addr += BLK_PER_PG;
 	}
-	delete_blk(&l, blk_addr % BLK_PER_PG, l.blk_end - blk_addr, compr_pg);
+	delete_blk(l.pg_addr, blk_addr % BLK_PER_PG, l.blk_end - blk_addr,
+		   compr_pg);
 
 	return 0;
 }
@@ -505,11 +407,10 @@ int uszram_pg_size(uint_least32_t pg_addr)
 		return -1;
 
 	size_type size = sizeof (struct page);
-	struct lock *lk = lktbl + pg_addr / PG_PER_LOCK;
 
-	lock_as_reader(lk);
+	lock_as_reader(&pgtbl[pg_addr].lock);
 	size += get_size(pgtbl + pg_addr);
-	unlock_as_reader(lk);
+	pgtbl[pg_addr].lock = 0;
 
 	return size;
 }
@@ -520,18 +421,17 @@ int uszram_pg_heap(uint_least32_t pg_addr)
 		return -1;
 
 	size_type size = 0;
-	struct lock *lk = lktbl + pg_addr / PG_PER_LOCK;
 
-	lock_as_reader(lk);
+	lock_as_reader(&pgtbl[pg_addr].lock);
 	size = get_size(pgtbl + pg_addr);
-	unlock_as_reader(lk);
+	pgtbl[pg_addr].lock = 0;
 
 	return size;
 }
 
 uint_least64_t uszram_total_size(void)
 {
-	return sizeof pgtbl + sizeof lktbl + stats.compr_data_size;
+	return sizeof pgtbl + stats.compr_data_size;
 }
 
 uint_least64_t uszram_total_heap(void)
