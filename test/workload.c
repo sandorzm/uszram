@@ -17,6 +17,8 @@
    typedef void      *thread_ret;
 #endif
 
+#define DATA_FILE_SIZE 8192u
+
 
 struct thread_data {
 	// Thread-specific data
@@ -144,7 +146,8 @@ static inline int get_write_data(const struct workload *w, unsigned char compr,
 		fclose(data);
 		if (ret == buf_size)
 			return 0;
-		PRINT_ERROR("Error reading %s\n", filename);
+		PRINT_ERROR("Error reading %zu bytes from %s\n",
+			    buf_size, filename);
 		return -1;
 	}
 
@@ -155,24 +158,33 @@ static inline int get_write_data(const struct workload *w, unsigned char compr,
 static thread_ret pop_thread(void *tdata)
 {
 	struct thread_data *const td = tdata;
-	uint_least64_t pg_count = td->w->request_count;
-	if (pg_count > USZRAM_PAGE_COUNT)
-		pg_count = USZRAM_PAGE_COUNT;
-	uint_least64_t req = pg_count / td->w->thread_count;
-	uint_least32_t addr = req * td->id;
+	uint_least32_t pg_group = DATA_FILE_SIZE / USZRAM_PAGE_SIZE;
+	uint_least64_t pg_count = (td->w->request_count < USZRAM_PAGE_COUNT ?
+				   td->w->request_count : USZRAM_PAGE_COUNT),
+		       req_pgs = pg_count / td->w->thread_count;
+	uint_least32_t addr_first = req_pgs * td->id;
 
 	// First thread gets the leftover requests
 	if (td->id == 0)
-		req += pg_count % td->w->thread_count;
+		req_pgs += pg_count % td->w->thread_count;
 	else
-		addr += pg_count % td->w->thread_count;
+		addr_first += pg_count % td->w->thread_count;
+
+	uint_least32_t addr_end = addr_first + req_pgs / pg_group * pg_group,
+		       last_group = req_pgs % pg_group;
 
 	long compr_rand;
 	unsigned char compr;
-	for (uint_least64_t i = 0; i < req; ++i) {
+	uint_least32_t addr = addr_first;
+	for (; addr != addr_end; addr += pg_group) {
 		mrand48_r(&td->rand_data, &compr_rand);
 		compr = (unsigned long)compr_rand % td->compr_count;
-		uszram_write_pg(addr + i, 1, td->write_data[compr]);
+		uszram_write_pg(addr, pg_group, td->write_data[compr]);
+	}
+	if (last_group) {
+		mrand48_r(&td->rand_data, &compr_rand);
+		compr = (unsigned long)compr_rand % td->compr_count;
+		uszram_write_pg(addr, last_group, td->write_data[compr]);
 	}
 	return 0;
 }
@@ -207,9 +219,10 @@ void populate_store(const struct workload *w, struct test_timer *t)
 	if (!valid_compr(w->compr_min, w->compr_max) || w->thread_count == 0) {
 		PRINT_ERROR("Invalid workload\n");
 		return;
-	} else if (USZRAM_PAGE_SIZE > 4096) {
-		PRINT_ERROR("Page size > 4096 bytes: %u\n", USZRAM_PAGE_SIZE);
-		return; // Data files are only 4096 bytes
+	} else if (USZRAM_PAGE_SIZE > DATA_FILE_SIZE) {
+		PRINT_ERROR("Page size > %i bytes: %u\n",
+			    DATA_FILE_SIZE, USZRAM_PAGE_SIZE);
+		return; // Data files are only DATA_FILE_SIZE bytes
 	}
 
 	unsigned char compr_count = w->compr_max - w->compr_min;
@@ -219,10 +232,10 @@ void populate_store(const struct workload *w, struct test_timer *t)
 		return;
 	}
 	for (unsigned char i = 0; i < compr_count; ++i) {
-		write_data[i] = malloc(USZRAM_PAGE_SIZE);
+		write_data[i] = malloc(DATA_FILE_SIZE);
 		if (write_data[i] == NULL)
 			PRINT_ERROR("malloc ran out of memory\n");
-		else if (!get_write_data(w, w->compr_min + i, USZRAM_PAGE_SIZE,
+		else if (!get_write_data(w, w->compr_min + i, DATA_FILE_SIZE,
 					 write_data[i]))
 			continue;
 		compr_count = i + 1;
@@ -285,9 +298,10 @@ void run_workload(const struct workload *w, struct test_timer *t)
 	// a block group
 	const size_t read_buf_size  = buf_size(w->read),
 		     write_buf_size = buf_size(w->write);
-	if (write_buf_size > 4096) {
-		PRINT_ERROR("Write group > 4096 bytes: %zu\n", write_buf_size);
-		return; // Data files are only 4096 bytes
+	if (write_buf_size > DATA_FILE_SIZE) {
+		PRINT_ERROR("Write group > %i bytes: %zu\n",
+			    DATA_FILE_SIZE, write_buf_size);
+		return; // Data files are only DATA_FILE_SIZE bytes
 	}
 
 	unsigned char compr_count = w->compr_max - w->compr_min;
