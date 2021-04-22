@@ -2,14 +2,10 @@
 #define ALLOC_API_H
 
 
-#ifdef USZRAM_JEMALLOC
-#  include <jemalloc/jemalloc.h>
-#else
-#  include <stdlib.h>
-#endif
+#include "uszram-def.h"
 
-#include "uszram-page.h"
 
+struct page;
 
 /* maybe_reallocate() allocates, reallocates, or deallocates pg->data to hold
  * new_size bytes of new data, where it previously held old_size (as returned by

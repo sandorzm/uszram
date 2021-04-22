@@ -2,7 +2,10 @@
 #define USZRAM_ZAPI_H
 
 
+#include <string.h>
+
 #include "../compr-api.h"
+#include "../uszram-page.h"
 #include "../../zapi/src/zapi.h"
 
 

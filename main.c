@@ -1,5 +1,5 @@
 /* COMPILE:
- * cc -pthread main.c uszram.c ... -llz4 -ljemalloc [-ldl -lm -static]
+ * cc -pthread main.c uszram.c ... -llz4 [-ljemalloc] [-ldl -lm -static]
  */
 #include <stdio.h>
 #include <inttypes.h>
@@ -11,8 +11,7 @@
 #include "test/test-utils.h"
 
 
-static inline void run_varying_threads(struct workload *w,
-				       struct test_timer *t,
+static inline void run_varying_threads(struct workload *w, struct test_timer *t,
 				       unsigned max_threads, int indent,
 				       _Bool raw)
 {

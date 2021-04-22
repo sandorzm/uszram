@@ -1,3 +1,4 @@
+#include <string.h>
 #include <stdatomic.h>
 
 #include "allocators/uszram-basic.h"

@@ -2,7 +2,10 @@
 #define COMPR_WITH_META_H
 
 
+#include <string.h>
+
 #include "../compr-api.h"
+#include "../uszram-page.h"
 
 
 inline static _Bool is_huge(struct page *pg)

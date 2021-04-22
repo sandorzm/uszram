@@ -24,10 +24,8 @@
 #define USZRAM_BLOCK_COUNT (1ul << 24)
 
 /* Change the next 3 definitions to select the memory allocator and compressor.
- *
- * The first definition sets the memory allocation engine:
- * - USZRAM_MALLOC selects standard malloc
- * - USZRAM_JEMALLOC selects jemalloc
+ * The allocator uses standard malloc unless you link the program with jemalloc
+ * (like cc *.c -ljemalloc).
  *
  * The second definition sets the memory allocation strategy:
  * - USZRAM_BASIC selects a basic strategy
@@ -37,24 +35,23 @@
  * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
  *   compression work as much as possible and thus increase speed
  */
-#define USZRAM_JEMALLOC
 #define USZRAM_BASIC
 #define USZRAM_LZ4
 
 /* Change the next 2 definitions to configure the handling of large pages.
  *
- * Compressed pages are limited to USZRAM_MAX_COMPR_FRAC times the page size.
+ * Compressed pages are limited to USZRAM_MAX_NHUGE_PERCENT of the page size.
  * Those that would be bigger ("huge" pages) are instead stored uncompressed,
  * occupying the full page size (what little space compression would save is not
- * deemed worth the overhead). USZRAM_MAX_COMPR_FRAC must be at least
- * 1.f / USZRAM_PAGE_SIZE and at most 1.
+ * deemed worth the overhead). USZRAM_MAX_NHUGE_PERCENT must be an integer at
+ * least 100.0 / USZRAM_PAGE_SIZE and at most 100.
  *
  * uszram allows huge pages to accumulate USZRAM_HUGE_WAIT block updates before
  * compressing them again (so it doesn't waste too much time compressing
  * incompressible data). USZRAM_HUGE_WAIT must be at least 1 and at most 64.
  */
-#define USZRAM_MAX_COMPR_FRAC 0.75f
-#define USZRAM_HUGE_WAIT      64u
+#define USZRAM_MAX_NHUGE_PERCENT 75u
+#define USZRAM_HUGE_WAIT         64u
 
 /* Change the next 2 definitions to configure locking.
  *
