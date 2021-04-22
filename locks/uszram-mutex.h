@@ -5,7 +5,7 @@
 #include <stdatomic.h>
 
 
-typedef struct atomic_flag lock_type;
+typedef atomic_flag lock_type;
 
 static inline void initialize_lock(lock_type *lk)
 {

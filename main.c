@@ -17,12 +17,12 @@ static inline void run_varying_threads(struct workload *w,
 {
 	if (max_threads == 0)
 		return;
-	if (!raw) {
-		unsigned copy = max_threads;
+	if (raw)
+		indent = 0;
+	unsigned copy = max_threads;
+	while (copy /= 10)
 		++indent;
-		while (copy /= 10)
-			++indent;
-	}
+	++indent;
 	for (unsigned i = 1; i <= max_threads; ++i) {
 		w->thread_count = i;
 		run_workload(w, t);
@@ -31,7 +31,8 @@ static inline void run_varying_threads(struct workload *w,
 			       "%.4f s CPU time\n", indent, i,
 			       i == 1 ? " " : "s", t->real_sec, t->cpu_sec);
 		else
-			printf("%u,%.4f,%.4f\n", i, t->real_sec, t->cpu_sec);
+			printf("%*u,%.4f,%.4f\n", indent, i,
+			       t->real_sec, t->cpu_sec);
 	}
 }
 
@@ -54,13 +55,13 @@ int main(int argc, char **argv)
 		.thread_count = 16,
 	};
 	struct workload work = {
-		.request_count = 1ul << 24,
+		.request_count = 1ul << 21,
 		.read = {.pgblk_group = {1, 1}},
 		.write = {.pgblk_group = {1, 1}},
 	};
 
 	struct test_timer t;
-	const unsigned char blks  [] = {0, 100},
+	const unsigned char blks  [] = {100},
 			    writes[] = {0, 100},
 			    comprs[] = {1, 2, 4};
 	printf("USZRAM_PAGE_SIZE: %4u\n", USZRAM_PAGE_SIZE);
@@ -97,7 +98,7 @@ int main(int argc, char **argv)
 				if (raw)
 					printf("Thread count,Real time (s)"
 					       ",CPU time (s)\n");
-				run_varying_threads(&work, &t, 1, 6, raw);
+				run_varying_threads(&work, &t, 16, 6, raw);
 				printf("\n");
 			}
 		}

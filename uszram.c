@@ -224,7 +224,7 @@ int uszram_delete_all(void)
 	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i) {
 		lock_as_writer(&pgtbl[i].lock);
 		delete_pg(pgtbl + i);
-		pgtbl[i].lock = 0;
+		unlock_as_writer(&pgtbl[i].lock);
 	}
 	return 0;
 }
@@ -354,7 +354,7 @@ int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages)
 	for (; pg_addr != pg_end; ++pg_addr) {
 		lock_as_writer(&pgtbl[pg_addr].lock);
 		delete_pg(pgtbl + pg_addr);
-		pgtbl[pg_addr].lock = 0;
+		unlock_as_writer(&pgtbl[pg_addr].lock);
 	}
 
 	return 0;
@@ -410,7 +410,7 @@ int uszram_pg_size(uint_least32_t pg_addr)
 
 	lock_as_reader(&pgtbl[pg_addr].lock);
 	size += get_size(pgtbl + pg_addr);
-	pgtbl[pg_addr].lock = 0;
+	unlock_as_reader(&pgtbl[pg_addr].lock);
 
 	return size;
 }
@@ -424,7 +424,7 @@ int uszram_pg_heap(uint_least32_t pg_addr)
 
 	lock_as_reader(&pgtbl[pg_addr].lock);
 	size = get_size(pgtbl + pg_addr);
-	pgtbl[pg_addr].lock = 0;
+	unlock_as_reader(&pgtbl[pg_addr].lock);
 
 	return size;
 }
