@@ -2,8 +2,10 @@
 #define COMPR_API_H
 
 
-#include "uszram-page.h"
+#include "uszram-def.h"
 
+
+struct page;
 
 /* is_huge() returns 0 if pg->data is NULL or formatted as a compressed page,
  * otherwise 1 (pg is huge; i.e., pg->data is just raw data).

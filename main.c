@@ -1,5 +1,5 @@
 /* COMPILE:
- * cc -pthread main.c uszram.c ... -llz4 -ljemalloc [-ldl -lm -static]
+ * cc -pthread main.c uszram.c ... -llz4 [-ljemalloc] [-ldl -lm -static]
  */
 #include <stdio.h>
 #include <inttypes.h>
@@ -10,8 +10,7 @@
 #include "test/test-utils.h"
 
 
-static inline void run_varying_threads(struct workload *w,
-				       struct test_timer *t,
+static inline void run_varying_threads(struct workload *w, struct test_timer *t,
 				       unsigned max_threads, int indent,
 				       _Bool raw)
 {
@@ -55,14 +54,14 @@ int main(int argc, char **argv)
 		.thread_count = 16,
 	};
 	struct workload work = {
-		.request_count = 1ul << 21,
+		.request_count = 1ul << 23,
 		.read = {.pgblk_group = {1, 1}},
 		.write = {.pgblk_group = {1, 1}},
 	};
 
 	struct test_timer t;
 	const unsigned char blks  [] = {100},
-			    writes[] = {0, 100},
+			    writes[] = {0, 50, 100},
 			    comprs[] = {1, 2, 4};
 	printf("USZRAM_PAGE_SIZE: %4u\n", USZRAM_PAGE_SIZE);
 

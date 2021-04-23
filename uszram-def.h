@@ -2,9 +2,6 @@
 #define USZRAM_DEF_H
 
 
-#include <string.h>
-#include <stddef.h>
-
 #include "uszram.h"
 
 
@@ -16,7 +13,9 @@
 
 
 #define BLK_PER_PG    USZRAM_BLK_PER_PG
-#define MAX_NON_HUGE  ((size_type)(USZRAM_MAX_COMPR_FRAC * USZRAM_PAGE_SIZE))
+#define MAX_NHUGE_MUL ((uint_least64_t)USZRAM_PAGE_SIZE	\
+		       * USZRAM_MAX_NHUGE_PERCENT)
+#define MAX_NON_HUGE  ((MAX_NHUGE_MUL > 100u ? MAX_NHUGE_MUL : 100u) / 100u)
 
 
 #endif // USZRAM_DEF_H

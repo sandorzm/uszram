@@ -2,7 +2,10 @@
 #define USZRAM_BASIC_H
 
 
+#include <stdlib.h>
+
 #include "../alloc-api.h"
+#include "../uszram-page.h"
 
 
 static int maybe_reallocate(struct page *pg, size_type old_size,
