@@ -61,6 +61,8 @@ static int read_modify(struct page *pg, size_type offset, size_type blocks,
 			memcpy(pg->data + offset, new_data, bytes);
 		return needs_recompress(pg, blocks);
 	}
+	if (raw_pg == NULL)
+		return 0;
 	int ret = decompress(pg, USZRAM_PAGE_SIZE, raw_pg);
 	if (ret < 0)
 		return ret;

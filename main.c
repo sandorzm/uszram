@@ -57,14 +57,14 @@ int main(int argc, char **argv)
 		.thread_count = 16,
 	};
 	struct workload work = {
-		.request_count = 1ul << 24,
+		.request_count = 1ul << 23,
 		.read = {.pgblk_group = {1, 1}},
 		.write = {.pgblk_group = {1, 1}},
 	};
 
 	struct test_timer t;
-	const unsigned char blks  [] = {0, 100},
-			    writes[] = {0, 100},
+	const unsigned char blks  [] = {100},
+			    writes[] = {0, 50, 100},
 			    comprs[] = {1, 2, 4};
 	printf("USZRAM_PAGE_SIZE:   %4u\n"
 	       "USZRAM_PG_PER_LOCK: %4u\n\n",
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 				if (raw)
 					printf("Thread count,Real time (s)"
 					       ",CPU time (s)\n");
-				run_varying_threads(&work, &t, 1, 6, raw);
+				run_varying_threads(&work, &t, 16, 6, raw);
 				printf("\n");
 			}
 		}
