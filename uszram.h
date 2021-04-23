@@ -65,7 +65,7 @@
  * - USZRAM_PTH_RW selects a readers-writer lock from the pthread library
  */
 #define USZRAM_PG_PER_LOCK 4u
-#define USZRAM_PTH_RW
+#define USZRAM_PTH_MTX
 
 
 /* Don't change any of the following lines.
