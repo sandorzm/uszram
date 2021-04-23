@@ -59,7 +59,7 @@
  * - USZRAM_MUTEX selects a mutex
  * - USZRAM_RWLOCK selects a readers-writer lock
  */
-#define USZRAM_RWLOCK
+#define USZRAM_MUTEX
 
 
 /* Don't change any of the following lines.
