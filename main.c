@@ -2,13 +2,10 @@
  * cc -pthread main.c uszram.c ... -llz4 [-ljemalloc] [-ldl -lm -static]
  */
 #include <stdio.h>
-#include <inttypes.h>
 
-#include "uszram.h"
 //#include "test/small-test.h"
 //#include "test/large-test.h"
 #include "test/workload.h"
-#include "test/test-utils.h"
 
 
 static inline void run_varying_threads(struct workload *w, struct test_timer *t,
@@ -47,16 +44,20 @@ int main(int argc, char **argv)
 	*/
 
 	// workload.h
+	const char *dirs[] = {"xls/"};
 	struct workload pop = {
+		.data_dir_count = sizeof dirs / sizeof *dirs,
+		.data_dirs = dirs,
 		.request_count = USZRAM_PAGE_COUNT,
 		.thread_count = 16,
 	};
 	struct workload work = {
+		.data_dir_count = sizeof dirs / sizeof *dirs,
+		.data_dirs = dirs,
 		.request_count = 1ul << 22,
 		.read = {.pgblk_group = {1, 1}},
 		.write = {.pgblk_group = {1, 1}},
 	};
-
 	struct test_timer t;
 	const unsigned char blks  [] = {0, 100},
 			    writes[] = {0, 100},
@@ -86,8 +87,9 @@ int main(int argc, char **argv)
 			       pop.thread_count, t.real_sec,
 			       pop.request_count / t.real_sec);
 		} else {
-			printf("Populated, %u thread(s): %.4f s, %.f pages/s\n",
-			       pop.thread_count, t.real_sec,
+			printf("Populated, %u thread%s: %.4f s, %.f pages/s\n",
+			       pop.thread_count,
+			       pop.thread_count == 1 ? "" : "s", t.real_sec,
 			       pop.request_count / t.real_sec);
 			print_stats(0);
 			printf("\n");

@@ -1,7 +1,7 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
-#include <time.h>
 
 #include "test-utils.h"
 

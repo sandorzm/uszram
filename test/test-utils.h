@@ -2,13 +2,14 @@
 #define TEST_UTILS_H
 
 
-#include <stdlib.h>
+#include <time.h>
 
 #include "../uszram.h"
 
 
 #define PRINT_ERROR(...) do { fprintf(stderr, "%s:%i: ", __FILE__, __LINE__); \
 			      fprintf(stderr, __VA_ARGS__); } while (0)
+
 
 struct test_timer {
 	struct timespec  start,     end;

@@ -1,10 +1,7 @@
+#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <inttypes.h>
 
 #include "workload.h"
-#include "../uszram.h"
 
 #ifdef USZRAM_STD_MTX
 #  include <threads.h>
@@ -98,6 +95,13 @@ static inline _Bool valid_workload(const struct workload *w)
 {
 	if (!valid_compr(w->compr_min, w->compr_max))
 		return 0;
+	if (w->data_dir_count == 0)
+		return 0;
+	if (w->data_dirs == NULL)
+		return 0;
+	for (unsigned char i = 0; i < w->data_dir_count; ++i)
+		if (w->data_dirs[i] == NULL)
+			return 0;
 	if ((w->read.percent_blks < 100 && w->read.pgblk_group[0] == 0)
 	    || (w->read.percent_blks && w->read.pgblk_group[1] == 0))
 		return 0;
@@ -109,24 +113,43 @@ static inline _Bool valid_workload(const struct workload *w)
 	return 1;
 }
 
-static inline int get_write_data(size_t buf_size, char buf[static buf_size],
-				 unsigned char compr)
+static inline int get_write_data(const struct workload *w, unsigned char compr,
+				 size_t buf_size, char buf[static buf_size])
 {
-	// Max length 16, plus null terminator: "data/cr11-12.raw"
-	char filename[17] = "data/cr";
-	snprintf(filename + 7, 10, "%hhu-%u.raw", compr, compr + 1u);
-	FILE *data = fopen(filename, "r");
-	if (data == NULL) {
-		PRINT_ERROR("Can't open %s\n", filename);
-		return -1;
-	}
-	size_t ret = fread(buf, 1, buf_size, data);
-	fclose(data);
-	if (ret != buf_size) {
+	// Max length 21, plus null terminator: "data/dump/cr11-12.raw"
+	char filename[22] = "data/";
+	for (unsigned char i = 0; i < w->data_dir_count; ++i) {
+		int len = snprintf(filename + 5, 6, "%s", w->data_dirs[i]);
+		if (len < 0 || len > 5 || (len == 5 && filename[9] != '/')) {
+			PRINT_ERROR("Invalid data directory: %s\n", filename);
+			return -1;
+		}
+		len += 5;
+		if (filename[len - 1] != '/')
+			filename[len++] = '/';
+		len = snprintf(filename + len, 12, "cr%u-%u.raw",
+			       compr, compr + 1u);
+		if (len < 0 || len > 11) {
+			PRINT_ERROR("Invalid data file: %s\n", filename);
+			return -1;
+		}
+
+		FILE *data = fopen(filename, "r");
+		if (data == NULL)
+			continue;
+
+		printf("Reading %s\n", filename);
+
+		size_t ret = fread(buf, 1, buf_size, data);
+		fclose(data);
+		if (ret == buf_size)
+			return 0;
 		PRINT_ERROR("Error reading %s\n", filename);
 		return -1;
 	}
-	return 0;
+
+	PRINT_ERROR("No data files found: last checked %s\n", filename);
+	return -1;
 }
 
 static thread_ret pop_thread(void *tdata)
@@ -199,8 +222,8 @@ void populate_store(const struct workload *w, struct test_timer *t)
 		write_data[i] = malloc(USZRAM_PAGE_SIZE);
 		if (write_data[i] == NULL)
 			PRINT_ERROR("malloc ran out of memory\n");
-		else if (!get_write_data(USZRAM_PAGE_SIZE, write_data[i],
-					 w->compr_min + i))
+		else if (!get_write_data(w, w->compr_min + i, USZRAM_PAGE_SIZE,
+					 write_data[i]))
 			continue;
 		compr_count = i + 1;
 		goto out_write_data;
@@ -277,8 +300,8 @@ void run_workload(const struct workload *w, struct test_timer *t)
 		write_data[i] = malloc(write_buf_size);
 		if (write_data[i] == NULL)
 			PRINT_ERROR("malloc ran out of memory\n");
-		else if (!get_write_data(write_buf_size, write_data[i],
-					 w->compr_min + i))
+		else if (!get_write_data(w, w->compr_min + i, write_buf_size,
+					 write_data[i]))
 			continue;
 		compr_count = i + 1;
 		goto out_write_data;
