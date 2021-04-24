@@ -139,9 +139,6 @@ static inline int get_write_data(const struct workload *w, unsigned char compr,
 		FILE *data = fopen(filename, "r");
 		if (data == NULL)
 			continue;
-
-		printf("Reading %s\n", filename);
-
 		size_t ret = fread(buf, 1, buf_size, data);
 		fclose(data);
 		if (ret == buf_size)
