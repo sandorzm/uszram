@@ -39,7 +39,7 @@ inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
  * otherwise 0.
  */
 inline static int decompress(struct page *pg, size_type bytes,
-			     char dest[static bytes]);
+			     char dest[static USZRAM_PAGE_SIZE]);
 
 /* write_compressed() writes 'bytes' bytes from src into pg->data, updating any
  * necessary metadata. If 'bytes' is zero, updates the metadata to reflect that

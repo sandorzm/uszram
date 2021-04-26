@@ -5,6 +5,8 @@
 
 #ifdef USZRAM_LZ4
 #  include "compressors/uszram-lz4.h"
+#elif defined USZRAM_ZSTD
+#  include "compressors/uszram-zstd.h"
 #else
 #  include "compressors/uszram-zapi.h"
 #endif
