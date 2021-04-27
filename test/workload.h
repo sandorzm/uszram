@@ -2,9 +2,6 @@
 #define WORKLOAD_H
 
 
-#include <stdint.h>
-#include <stdlib.h>
-
 #include "test-utils.h"
 
 
@@ -17,7 +14,9 @@ struct rw_workload {
 struct workload {
 	unsigned char       percent_writes,
 			    compr_min,
-			    compr_max;
+			    compr_max,
+			    data_dir_count;
+	const char        **data_dirs;
 	uint_least64_t      request_count;
 	unsigned            thread_count;
 	struct rw_workload  read, write;

@@ -31,9 +31,10 @@
  * - USZRAM_BASIC selects a basic strategy
  *
  * The third definition sets the compression library:
- * - USZRAM_LZ4 selects plain LZ4
  * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
  *   compression work as much as possible and thus increase speed
+ * - USZRAM_LZ4 selects plain LZ4
+ * - USZRAM_ZSTD selects Zstandard
  */
 #define USZRAM_BASIC
 #define USZRAM_LZ4

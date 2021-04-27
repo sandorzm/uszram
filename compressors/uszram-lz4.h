@@ -14,7 +14,7 @@ inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
 }
 
 inline static int decompress(struct page *pg, size_type bytes,
-			     char dest[static bytes])
+			     char dest[static USZRAM_PAGE_SIZE])
 {
 	int ret = LZ4_decompress_safe_partial(pg->data, dest, get_size(pg),
 					      bytes, USZRAM_PAGE_SIZE);

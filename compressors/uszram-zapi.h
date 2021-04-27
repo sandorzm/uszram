@@ -39,7 +39,7 @@ inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
 }
 
 inline static int decompress(struct page *pg, size_type bytes,
-			     char dest[static bytes])
+			     char dest[static USZRAM_PAGE_SIZE])
 {
 	return zapi_decompress_page(pg->data, dest);
 }
