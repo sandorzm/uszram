@@ -14,16 +14,11 @@ static inline void initialize_lock(lock_type *lk)
 
 static inline void lock_as_reader(lock_type *lk)
 {
-	unsigned char old = *lk;
-	while (1) {
-		if (old == 0xFF) {
-			old = *lk;
-			continue;
-		}
-		unsigned char new = old + 1;
-		if (atomic_compare_exchange_weak(lk, &old, new))
-			break;
-	}
+	unsigned char old, new;
+	do {
+		old = *lk;
+		new = old + 1;
+	} while (new == 0 || !atomic_compare_exchange_weak(lk, &old, new));
 }
 
 static inline void lock_as_writer(lock_type *lk)

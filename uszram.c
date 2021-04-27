@@ -1,5 +1,4 @@
 #include <string.h>
-#include <stdatomic.h>
 
 #include "allocators/uszram-basic.h"
 
@@ -30,13 +29,11 @@ struct blkloop {
 inline static struct blkloop make_blkloop(uint_least32_t blk_addr,
 					  uint_least32_t blocks)
 {
-	const uint_least32_t blk_end = blk_addr + blocks,
-			     pg_last = (blk_end - 1u) / BLK_PER_PG,
-			     pg_addr = blk_addr / BLK_PER_PG;
+	const uint_least32_t blk_end = blk_addr + blocks;
 	return (struct blkloop){
 		.blk_end = blk_end,
-		.pg_last = pg_last,
-		.pg_addr = pg_addr,
+		.pg_last = (blk_end - 1u) / BLK_PER_PG,
+		.pg_addr = blk_addr / BLK_PER_PG,
 	};
 }
 

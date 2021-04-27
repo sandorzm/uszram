@@ -2,8 +2,6 @@
 #define USZRAM_PAGE_H
 
 
-#include <stdatomic.h>
-
 #include "uszram-def.h"
 
 #ifdef USZRAM_BASIC
