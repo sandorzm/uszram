@@ -81,16 +81,16 @@
 int uszram_init(void);
 int uszram_exit(void);
 
-int uszram_read_pg(uint_least32_t pg_addr, uint_least32_t pages,
-		   char data[static pages * USZRAM_PAGE_SIZE]);
-int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks,
-		    char data[static blocks * USZRAM_BLOCK_SIZE]);
-int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
-		    const char data[static pages * USZRAM_PAGE_SIZE]);
+int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks, char *data);
+int uszram_read_pg(uint_least32_t pg_addr, uint_least32_t pages, char *data);
 int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
-		     const char data[static blocks * USZRAM_BLOCK_SIZE]);
-int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
+		     const char *data);
+int uszram_write_blk_hint(uint_least32_t blk_addr, uint_least32_t blocks,
+			  const char *data, const char *orig);
+int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
+		    const char *data);
 int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks);
+int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
 int uszram_delete_all(void);
 
 _Bool uszram_pg_exists(uint_least32_t pg_addr);
