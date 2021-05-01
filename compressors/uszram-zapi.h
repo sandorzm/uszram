@@ -9,77 +9,76 @@
 #include "../../zapi/src/zapi.h"
 
 
-inline static _Bool is_huge(struct page *pg)
+static inline _Bool is_huge(const struct page *pg)
 {
-	return pg->compr_data.size & (1u << USZRAM_PAGE_SHIFT);
+	return pg->compr_data.size >> SIZE_SHIFT;
 }
 
-inline static size_type get_size(struct page *pg)
+static inline size_type get_size(const struct page *pg)
 {
-	return is_huge(pg) ? USZRAM_PAGE_SIZE
-			   : zapi_page_size((BYTE *)pg->data);
+	return is_huge(pg) ? PAGE_SIZE : zapi_page_size((BYTE *)pg->data);
 }
 
-inline static size_type get_size_primary(struct page *pg)
+static inline size_type get_size_primary(const struct page *pg)
 {
-	return is_huge(pg) ? USZRAM_PAGE_SIZE : pg->compr_data.size;
+	return is_huge(pg) ? PAGE_SIZE : pg->compr_data.size;
 }
 
-inline static size_type free_reachable(struct page *pg)
+static inline size_type free_reachable(const struct page *pg)
 {
-	size_type old_size = zapi_page_size((BYTE *)pg->data);
+	const size_type old_size = zapi_page_size((BYTE *)pg->data);
 	zapi_free_page((BYTE *)pg->data);
 	return old_size - zapi_page_size((BYTE *)pg->data);
 }
 
-inline static size_type compress(const char src[static USZRAM_PAGE_SIZE],
+static inline size_type compress(const char src[static PAGE_SIZE],
 				 char dest[static MAX_NON_HUGE])
 {
 	return zapi_generate_page(src, dest);
 }
 
-inline static int decompress(struct page *pg, size_type bytes,
-			     char dest[static USZRAM_PAGE_SIZE])
+static inline int decompress(const struct page *pg, size_type bytes,
+			     char dest[static PAGE_SIZE])
 {
 	return zapi_decompress_page(pg->data, dest);
 }
 
-inline static void write_compressed(struct page *pg, size_type bytes,
+static inline void write_compressed(struct page *pg, size_type bytes,
 				    const char *src)
 {
-	if (bytes)
+	if (src)
 		memcpy(pg->data, src, bytes);
-	pg->compr_data.size = bytes;
+	pg->compr_data.size = bytes >> USZRAM_PAGE_SHIFT
+			      ? 1u << SIZE_SHIFT
+			      : bytes;
 }
 
-inline static _Bool needs_recompress(struct page *pg, size_type blocks)
+static inline _Bool needs_recompress(struct page *pg, size_type blocks)
 {
-	unsigned char mask = (1 << 6) - 1;
-	size_type updates = (pg->compr_data.size & mask) + blocks;
-	if (updates >= USZRAM_HUGE_WAIT) {
-		pg->compr_data.size &= ~mask;
+	const unsigned char mask = (1 << 6) - 1;
+	const size_type updates = (pg->compr_data.size & mask) + blocks;
+	if (updates >= USZRAM_HUGE_WAIT)
 		return 1;
-	}
-	++pg->compr_data.size;
+	pg->compr_data.size += blocks;
 	return 0;
 }
 
-static int read_modify(struct page *pg, size_type offset, size_type blocks,
-		       const char *new_data, char *raw_pg)
+static inline int read_modify(const struct page *pg, struct range blk,
+			      const char *new_data, const char *orig,
+			      char raw_pg[static PAGE_SIZE])
 {
-	offset *= USZRAM_BLOCK_SIZE;
-	size_type bytes = blocks * USZRAM_BLOCK_SIZE;
-	if (is_huge(pg)) {
-		if (new_data == NULL)
-			memset(pg->data + offset, 0, bytes);
-		else
-			memcpy(pg->data + offset, new_data, bytes);
-		return needs_recompress(pg, blocks);
-	}
-	if (new_data == NULL)
-		return zapi_delete_block(pg->data, offset, blocks, raw_pg,
-					 MAX_NON_HUGE);
-	return zapi_update_block(pg->data, new_data, offset, blocks, raw_pg,
+	if (orig)
+		return zapi_update_block_hint(pg->data, new_data,
+					      blk.offset, blk.count,
+					      raw_pg, orig, MAX_NON_HUGE);
+	return zapi_update_block(pg->data, new_data, blk.offset, blk.count,
+				 raw_pg, MAX_NON_HUGE);
+}
+
+static inline int read_delete(const struct page *pg, struct range blk,
+			      char raw_pg[static PAGE_SIZE])
+{
+	return zapi_delete_block(pg->data, blk.offset, blk.count, raw_pg,
 				 MAX_NON_HUGE);
 }
 

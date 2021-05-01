@@ -7,20 +7,19 @@
 #include "compr-with-meta.h"
 
 
-static inline size_type compress(const char src[static USZRAM_PAGE_SIZE],
+static inline size_type compress(const char src[static PAGE_SIZE],
 				 char dest[static MAX_NON_HUGE])
 {
-	size_t ret = ZSTD_compress(dest, MAX_NON_HUGE,
-				   src, USZRAM_PAGE_SIZE, 1);
+	const size_t ret = ZSTD_compress(dest, MAX_NON_HUGE, src, PAGE_SIZE, 1);
 	return ZSTD_isError(ret) ? 0 : ret;
 }
 
-static inline int decompress(struct page *pg, size_type bytes,
-			     char dest[static USZRAM_PAGE_SIZE])
+static inline int decompress(const struct page *pg, size_type bytes,
+			     char dest[static PAGE_SIZE])
 {
 	(void)bytes;
-	size_t ret = ZSTD_decompress(dest, USZRAM_PAGE_SIZE,
-				     pg->data, get_size(pg));
+	const size_t ret = ZSTD_decompress(dest, PAGE_SIZE, pg->data,
+					   get_size(pg));
 	return ZSTD_isError(ret) ? -1 : 0;
 }
 
