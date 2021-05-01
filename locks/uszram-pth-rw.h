@@ -11,32 +11,32 @@ struct lock {
 	pthread_rwlock_t rwlock;
 };
 
-inline static int initialize_lock(struct lock *lock)
+static inline int initialize_lock(struct lock *lock)
 {
 	return pthread_rwlock_init((pthread_rwlock_t *)lock, NULL);
 }
 
-inline static int destroy_lock(struct lock *lock)
+static inline int destroy_lock(struct lock *lock)
 {
 	return pthread_rwlock_destroy((pthread_rwlock_t *)lock);
 }
 
-inline static int lock_as_reader(struct lock *lock)
+static inline int lock_as_reader(struct lock *lock)
 {
 	return pthread_rwlock_rdlock((pthread_rwlock_t *)lock);
 }
 
-inline static int lock_as_writer(struct lock *lock)
+static inline int lock_as_writer(struct lock *lock)
 {
 	return pthread_rwlock_wrlock((pthread_rwlock_t *)lock);
 }
 
-inline static int unlock_as_reader(struct lock *lock)
+static inline int unlock_as_reader(struct lock *lock)
 {
 	return pthread_rwlock_unlock((pthread_rwlock_t *)lock);
 }
 
-inline static int unlock_as_writer(struct lock *lock)
+static inline int unlock_as_writer(struct lock *lock)
 {
 	return pthread_rwlock_unlock((pthread_rwlock_t *)lock);
 }

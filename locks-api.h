@@ -4,12 +4,12 @@
 
 struct lock;
 
-inline static int initialize_lock(struct lock *lock);
-inline static int destroy_lock(struct lock *lock);
-inline static int lock_as_reader(struct lock *lock);
-inline static int lock_as_writer(struct lock *lock);
-inline static int unlock_as_reader(struct lock *lock);
-inline static int unlock_as_writer(struct lock *lock);
+static inline int initialize_lock(struct lock *lock);
+static inline int destroy_lock(struct lock *lock);
+static inline int lock_as_reader(struct lock *lock);
+static inline int lock_as_writer(struct lock *lock);
+static inline int unlock_as_reader(struct lock *lock);
+static inline int unlock_as_writer(struct lock *lock);
 
 
 #endif // LOCKS_API_H

@@ -69,8 +69,8 @@ int main(int argc, char **argv)
 #else
 	printf("USZRAM_PTH_RW\n");
 #endif
-	printf("USZRAM_PAGE_SIZE:   %4u\n"
-	       "USZRAM_PG_PER_LOCK: %4u\n\n",
+	printf("PAGE_SIZE:   %4u\n"
+	       "PG_PER_LOCK: %4u\n\n",
 	       USZRAM_PAGE_SIZE, USZRAM_PG_PER_LOCK);
 
 	for (unsigned char c = 0; c < sizeof comprs; ++c) {
