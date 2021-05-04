@@ -17,7 +17,7 @@ struct range {
 	size_type offset, count;
 };
 
-#define RNG(o, c) (struct range){.offset = (o), .count = (c)}
+#define RANGE(o, c) (struct range){.offset = (o), .count = (c)}
 
 #define BLOCK_SIZE    USZRAM_BLOCK_SIZE
 #define PAGE_SIZE     USZRAM_PAGE_SIZE
