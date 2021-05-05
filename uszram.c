@@ -494,46 +494,41 @@ int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks)
 
 _Bool uszram_pg_exists(uint_least32_t pg_addr)
 {
-	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
+	if (pg_addr > USZRAM_PAGE_COUNT - 1)
 		return 0;
-	return pgtbl[pg_addr].data != NULL;
+	return pgtbl[pg_addr].data;
 }
 
 _Bool uszram_pg_is_huge(uint_least32_t pg_addr)
 {
-	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
+	if (pg_addr > USZRAM_PAGE_COUNT - 1)
 		return 0;
-	return is_huge(pgtbl + pg_addr);
-}
-
-int uszram_pg_size(uint_least32_t pg_addr)
-{
-	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
-		return -1;
-
-	size_type size = sizeof (struct page);
-	struct lock *lk = lktbl + pg_addr / PG_PER_LOCK;
+	struct lock *const lk = lktbl + pg_addr / PG_PER_LOCK;
 
 	lock_as_reader(lk);
-	size += get_size(pgtbl + pg_addr);
+	const _Bool huge = is_huge(pgtbl + pg_addr);
 	unlock_as_reader(lk);
-
-	return size;
+	return huge;
 }
 
 int uszram_pg_heap(uint_least32_t pg_addr)
 {
-	if (pg_addr > (uint_least32_t)(USZRAM_PAGE_COUNT - 1))
+	if (pg_addr > USZRAM_PAGE_COUNT - 1)
 		return -1;
-
-	size_type size;
-	struct lock *lk = lktbl + pg_addr / PG_PER_LOCK;
+	struct lock *const lk = lktbl + pg_addr / PG_PER_LOCK;
 
 	lock_as_reader(lk);
-	size = get_size(pgtbl + pg_addr);
+	const size_type size = get_size(pgtbl + pg_addr);
 	unlock_as_reader(lk);
-
 	return size;
+}
+
+int uszram_pg_size(uint_least32_t pg_addr)
+{
+	const int ret = uszram_pg_heap(pg_addr);
+	if (ret == -1)
+		return -1;
+	return ret + sizeof (struct page);
 }
 
 uint_least64_t uszram_total_size(void)
@@ -541,27 +536,8 @@ uint_least64_t uszram_total_size(void)
 	return sizeof pgtbl + sizeof lktbl + stats.compr_data_size;
 }
 
-uint_least64_t uszram_total_heap(void)
-{
-	return stats.compr_data_size;
-}
-
-uint_least64_t uszram_pages_stored(void)
-{
-	return stats.pages_stored;
-}
-
-uint_least64_t uszram_huge_pages(void)
-{
-	return stats.huge_pages;
-}
-
-uint_least64_t uszram_num_compr(void)
-{
-	return stats.num_compr;
-}
-
-uint_least64_t uszram_failed_compr(void)
-{
-	return stats.failed_compr;
-}
+uint_least64_t uszram_total_heap  (void) {return stats.compr_data_size;}
+uint_least64_t uszram_pages_stored(void) {return stats.pages_stored;   }
+uint_least64_t uszram_huge_pages  (void) {return stats.huge_pages;     }
+uint_least64_t uszram_num_compr   (void) {return stats.num_compr;      }
+uint_least64_t uszram_failed_compr(void) {return stats.failed_compr;   }
