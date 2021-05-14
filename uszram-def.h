@@ -13,8 +13,12 @@
    typedef uint_least32_t size_type;
 #endif
 
+/* struct range is for specifying a range of blocks in a page, with offset and
+ * count either both in units of blocks or both in units of bytes.
+ */
 struct range {
-	size_type offset, count;
+	size_type  offset,  // Blocks or bytes from the beginning of the page
+		   count;   // Blocks or bytes in the range starting at offset
 };
 
 #define RNG(o, c) (struct range){.offset = (o), .count = (c)}

@@ -23,21 +23,28 @@
 #define USZRAM_PAGE_SHIFT  12u
 #define USZRAM_BLOCK_COUNT (1ul << 24)
 
-/* Change the next 3 definitions to select the memory allocator and compressor.
- * The allocator uses standard malloc unless you link the program with jemalloc
- * (like cc *.c -ljemalloc).
+/* Change the next 3 definitions to select the memory allocator, compressor, and
+ * caching strategy. The allocator uses standard malloc unless you link the
+ * program with jemalloc (like cc *.c -ljemalloc).
  *
- * The second definition sets the memory allocation strategy:
+ * The first definition sets the memory allocation strategy:
  * - USZRAM_BASIC selects a basic strategy
  *
- * The third definition sets the compression library:
+ * The second definition sets the compression library:
  * - USZRAM_ZAPI selects Matthew Dennerlein's Z API, an LZ4 modified to reduce
  *   compression work as much as possible and thus increase speed
  * - USZRAM_LZ4 selects plain LZ4
  * - USZRAM_ZSTD selects Zstandard
+ *
+ * The third definition sets the caching strategy. uszram can move frequently
+ * read blocks to the beginning of the page to speed up future reads of those
+ * blocks when Z API or LZ4 is used.
+ * - USZRAM_LIST2_CACHE uses a recently-read list to cache 2 blocks in each page
+ * - USZRAM_NO_CACHING disables caching
  */
 #define USZRAM_BASIC
 #define USZRAM_LZ4
+#define USZRAM_LIST2_CACHE
 
 /* Change the next 2 definitions to configure the handling of large pages.
  *
@@ -78,31 +85,127 @@
 			   + (USZRAM_BLOCK_COUNT % USZRAM_BLK_PER_PG != 0))
 
 
+/* uszram_init() initializes locks and metadata to a valid state. It can safely
+ * be called multiple times; however, it is not thread-safe. Must be called
+ * before
+ * - uszram_{read, write, delete}_*()
+ * - uszram_pg_is_huge()
+ * - uszram_pg_size()
+ * - uszram_pg_heap()
+ */
 int uszram_init(void);
+
+/* uszram_exit() deallocates memory and resets metadata to a valid state. It can
+ * safely be called multiple times; however, it is not thread-safe. The
+ * functions that cannot be called before uszram_init() also cannot be called
+ * after uszram_exit() until uszram_init() is called again.
+ */
 int uszram_exit(void);
 
+/* uszram_read_blk() reads 'blocks' blocks starting at blk_addr into 'data'.
+ * 'data' must be at least 'blocks' blocks in size. Any nonexistent blocks are
+ * read as all zeros. Thread-safe.
+ */
 int uszram_read_blk(uint_least32_t blk_addr, uint_least32_t blocks, char *data);
+
+/* uszram_read_pg() reads 'pages' pages starting at pg_addr into 'data'. 'data'
+ * must be at least 'pages' pages in size. Any nonexistent pages are read as all
+ * zeros. Thread-safe.
+ */
 int uszram_read_pg(uint_least32_t pg_addr, uint_least32_t pages, char *data);
+
+/* uszram_write_blk() writes 'blocks' blocks starting at blk_addr from 'data'.
+ * 'data' must be at least 'blocks' blocks in size. Thread-safe.
+ */
 int uszram_write_blk(uint_least32_t blk_addr, uint_least32_t blocks,
 		     const char *data);
+
+/* uszram_write_blk_hint() is like uszram_write_blk() except that orig must be
+ * at least 'blocks' blocks in size, and its first 'blocks' blocks must equal
+ * the original data to be overwritten with nonexistent blocks replaced by all
+ * zeros. That is, orig must be as if uszram_read_blk(blk_addr, blocks, orig)
+ * were called.
+ *
+ * This hint speeds up the operation when using USZRAM_ZAPI.
+ */
 int uszram_write_blk_hint(uint_least32_t blk_addr, uint_least32_t blocks,
 			  const char *data, const char *orig);
+
+/* uszram_write_blk() writes 'pages' pages starting at pg_addr from 'data'.
+ * 'data' must be at least 'pages' pages in size. Thread-safe.
+ */
 int uszram_write_pg(uint_least32_t pg_addr, uint_least32_t pages,
 		    const char *data);
+
+/* uszram_delete_blk() writes zeros over 'blocks' blocks starting at blk_addr,
+ * increasing compressibility and saving space. If this makes a page empty and
+ * USZRAM_ZAPI is defined, the page may be deallocated, further saving space.
+ * Thread-safe.
+ */
 int uszram_delete_blk(uint_least32_t blk_addr, uint_least32_t blocks);
+
+/* uszram_delete_pg() deallocates 'pages' pages starting at pg_addr.
+ * Thread-safe.
+ */
 int uszram_delete_pg(uint_least32_t pg_addr, uint_least32_t pages);
+
+/* uszram_delete_all() deallocates all USZRAM_PAGE_COUNT pages. Thread-safe.
+ */
 int uszram_delete_all(void);
 
+/* uszram_pg_exists() returns whether the page at pg_addr has a heap allocation.
+ * This is always true if it contains any nonzero data. Thread-safe.
+ */
 _Bool uszram_pg_exists(uint_least32_t pg_addr);
+
+/* uszram_pg_is_huge() returns whether the page at pg_addr is incompressible and
+ * stored as raw data. Thread-safe.
+ */
 _Bool uszram_pg_is_huge(uint_least32_t pg_addr);
+
+/* uszram_pg_size() returns the number of stack + heap bytes representing the
+ * page at pg_addr. Thread-safe.
+ */
 int uszram_pg_size(uint_least32_t pg_addr);
+
+/* uszram_pg_heap() returns the number of bytes on the heap representing the
+ * page at pg_addr. Thread-safe.
+ */
 int uszram_pg_heap(uint_least32_t pg_addr);
 
+/* uszram_total_size() returns the number of stack + heap bytes representing the
+ * entire data store, except for any heap data allocated by locks, which is
+ * unknowable. Thread-safe.
+ */
 uint_least64_t uszram_total_size(void);
+
+/* uszram_total_heap() returns the number of bytes on the heap representing the
+ * entire data store, except locks, whose heap data is inscrutable.
+ * Thread-safe.
+ */
 uint_least64_t uszram_total_heap(void);
+
+/* uszram_pages_stored() returns the current number of pages that exist (see
+ * uszram_pg_exists()). Thread-safe.
+ */
 uint_least64_t uszram_pages_stored(void);
+
+/* uszram_huge_pages() returns the current number of incompressible, or huge,
+ * pages (see uszram_pg_is_huge()). Thread-safe.
+ */
 uint_least64_t uszram_huge_pages(void);
+
+/* uszram_num_compr() returns the number of calls to the compressor's
+ * compression function(s) since the last uszram_exit() (or the start of the
+ * program if there were none). Thread-safe.
+ */
 uint_least64_t uszram_num_compr(void);
+
+/* uszram_failed_compr() returns the number of calls to the compressor's
+ * compression function(s) since the last uszram_exit() (or the start of the
+ * program if there were none) that compressed to more than
+ * USZRAM_MAX_NHUGE_PERCENT of the page size. Thread-safe.
+ */
 uint_least64_t uszram_failed_compr(void);
 
 
