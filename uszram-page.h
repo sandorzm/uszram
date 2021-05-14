@@ -14,6 +14,10 @@
 #  include "compressors/uszram-zapi-def.h"
 #endif
 
+#ifdef USZRAM_LIST2_CACHE
+#  include "caches/list2-cache.h"
+#endif
+
 
 struct page {
 	char *_Atomic data;
@@ -22,6 +26,9 @@ struct page {
 #endif
 #ifndef NO_COMPR_METADATA
 	struct compr_data compr_data;
+#endif
+#ifndef USZRAM_NO_CACHING
+	struct cache_data cache_data;
 #endif
 };
 
