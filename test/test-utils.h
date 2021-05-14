@@ -26,6 +26,8 @@ void assert_safe(_Bool b);
 void assert_equal(int expected, int actual);
 void assert_empty(void);
 
+char *memcpy_ret(char *restrict dest, const char *restrict src, size_t count);
+
 void blk_read_fast(uint_least32_t blk_addr,
 		   char expected[static USZRAM_BLOCK_SIZE]);
 void pg_read_fast(uint_least32_t pg_addr,

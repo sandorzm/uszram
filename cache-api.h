@@ -29,14 +29,14 @@ struct cache_data;
  * according to 'cache', putting any cached blocks back in their original
  * places.
  */
-static inline void restore_blk_order(struct cache_data cache,
+static inline void restore_blk_order(const struct cache_data cache,
 				     char data[static PAGE_SIZE]);
 
 /* get_ordered_blks() gets the blocks specified by 'byte' from their (possibly
  * out-of-order) locations in src and reads them into dest in their original
  * order according to 'cache'.
  */
-static inline void get_ordered_blks(struct cache_data cache,
+static inline void get_ordered_blks(const struct cache_data cache,
 				    struct range byte,
 				    const char src[static PAGE_SIZE],
 				    char dest[static BLOCK_SIZE]);
@@ -46,8 +46,8 @@ static inline void get_ordered_blks(struct cache_data cache,
  * (Without caching, this would simply be blk.offset + blk.count times the block
  * size.)
  */
-static inline size_type decompr_byte_count(struct cache_data cache,
-					   struct range blk);
+static inline size_type decompr_byte_count(const struct cache_data cache,
+					   const struct range blk);
 
 /* log_read() updates metadata in 'cache' to reflect reads of blk.count blocks
  * starting at blk.offset blocks from the beginning of the corresponding page.
@@ -64,6 +64,11 @@ static inline void update_cache(struct cache_data *cache,
  * cached.
  */
 static inline void reset_cache(struct cache_data *cache);
+
+/* init_cache() is like reset_cache() but assumes that *cache is all zeros, as
+ * it is when it's statically initialized at uszram startup.
+ */
+static inline void init_cache(struct cache_data *cache);
 
 
 #endif // CACHE_API_H

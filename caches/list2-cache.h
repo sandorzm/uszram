@@ -21,7 +21,7 @@ struct cache_data {
 		  cand1count:2;
 };
 
-static inline void restore_blk_order(struct cache_data cache,
+static inline void restore_blk_order(const struct cache_data cache,
 				     char data[static PAGE_SIZE])
 {
 	const _Bool min_loc = cache.cur1 < cache.cur0;
@@ -43,15 +43,16 @@ static inline void restore_blk_order(struct cache_data cache,
 		data += BLOCK_SIZE;
 	} else {
 		memcpy(max_data, data, BLOCK_SIZE);
+		char *temp = data;
 		data += (1 + cache.cur1) * BLOCK_SIZE;
-		memcpy(data, data, BLOCK_SIZE);
+		memcpy(temp, data, BLOCK_SIZE);
 	}
 	const size_type count = cached[!min_loc] - cached[min_loc] - BLOCK_SIZE;
 	memmove(data, data + BLOCK_SIZE, count);
 	memcpy(data + count, max_data, BLOCK_SIZE);
 }
 
-static inline void get_ordered_blks(struct cache_data cache,
+static inline void get_ordered_blks(const struct cache_data cache,
 				    struct range byte,
 				    const char src[static PAGE_SIZE],
 				    char dest[static BLOCK_SIZE])
@@ -65,28 +66,28 @@ static inline void get_ordered_blks(struct cache_data cache,
 		byte.offset + byte.count,
 	};
 	for (unsigned char i = 0; i < sizeof offsets / sizeof *offsets; ++i) {
-		if (byte.offset > offsets[i])
-			continue;
-		size_type to_next = offsets[i] - byte.offset;
-		if (to_next >= byte.count) {
-			memcpy(dest, src + (2 - i) * BLOCK_SIZE + byte.offset,
-			       byte.count);
-			return;
+		if (byte.offset <= offsets[i]) {
+			size_type to_next = offsets[i] - byte.offset;
+			const size_type src_offset
+				= (2 - i) * BLOCK_SIZE + byte.offset;
+			if (to_next >= byte.count) {
+				memcpy(dest, src + src_offset, byte.count);
+				return;
+			}
+			memcpy(dest, src + src_offset, to_next);
+			dest += to_next;
+			memcpy(dest, src + BLOCK_SIZE * min_loc, BLOCK_SIZE);
+			dest += BLOCK_SIZE;
+			to_next     += BLOCK_SIZE;
+			byte.offset += to_next;
+			byte.count  -= to_next;
 		}
-		memcpy(dest, src + (2 - i) * BLOCK_SIZE + byte.offset, to_next);
-		dest += to_next;
-		memcpy(dest, src + BLOCK_SIZE * min_loc, BLOCK_SIZE);
-		dest += BLOCK_SIZE;
-
-		min_loc      = !min_loc;
-		to_next     += BLOCK_SIZE;
-		byte.offset += to_next;
-		byte.count  -= to_next;
+		min_loc = !min_loc;
 	}
 }
 
-static inline size_type decompr_byte_count(struct cache_data cache,
-					   struct range blk)
+static inline size_type decompr_byte_count(const struct cache_data cache,
+					   const struct range blk)
 {
 	if (blk.count <= 2) {
 		unsigned char found    = 0,
@@ -100,12 +101,8 @@ static inline size_type decompr_byte_count(struct cache_data cache,
 				return (i + 1) * BLOCK_SIZE;
 		}
 	}
-	size_type ret = blk.offset + blk.count;
-	if (cache.cur0 >= ret)
-		++ret;
-	if (cache.cur1 >= ret)
-		++ret;
-	return ret * BLOCK_SIZE;
+	const size_type ret = blk.offset + blk.count;
+	return (ret + (cache.cur0 >= ret) + (cache.cur1 >= ret)) * BLOCK_SIZE;
 }
 
 #define LOG_READ2
@@ -247,23 +244,29 @@ static inline void update_cache(struct cache_data *cache,
 				    cache->next1 * BLOCK_SIZE};
 	get_ordered_blks(*cache, RNG(0, cached[min_loc]), copy,
 			 data + 2 * BLOCK_SIZE);
-	get_ordered_blks(*cache, RNG(cached[min_loc], 1), copy, data);
-	get_ordered_blks(*cache, RNG(cached[min_loc] + 1,
-				     cached[!min_loc] - cached[min_loc] - 1),
-			 copy, data + (2 + cached[min_loc]) * BLOCK_SIZE);
-	get_ordered_blks(*cache, RNG(cached[!min_loc], 1), copy,
-			 data + BLOCK_SIZE);
-	get_ordered_blks(*cache, RNG(cached[!min_loc] + 1,
-				     BLK_PER_PG - cached[!min_loc] - 1),
-			 copy, data + (1 + cached[!min_loc]) * BLOCK_SIZE);
+	get_ordered_blks(*cache, RNG(cached[min_loc], BLOCK_SIZE), copy,
+			 data + BLOCK_SIZE * min_loc);
+	size_type next = cached[min_loc] + BLOCK_SIZE;
+	get_ordered_blks(*cache, RNG(next, cached[!min_loc] - next),
+			 copy, data + 2 * BLOCK_SIZE + cached[min_loc]);
+	get_ordered_blks(*cache, RNG(cached[!min_loc], BLOCK_SIZE), copy,
+			 data + BLOCK_SIZE * !min_loc);
+	next = cached[!min_loc] + BLOCK_SIZE;
+	get_ordered_blks(*cache, RNG(next, PAGE_SIZE - next),
+			 copy, data + BLOCK_SIZE + cached[!min_loc]);
 	cache->cur0 = cache->next0;
 	cache->cur1 = cache->next1;
+}
+
+static inline void init_cache(struct cache_data *cache)
+{
+	cache->cur1 = 1;
 }
 
 static inline void reset_cache(struct cache_data *cache)
 {
 	memset(cache, 0, sizeof *cache);
-	cache->cur1 = 1;
+	init_cache(cache);
 }
 
 
