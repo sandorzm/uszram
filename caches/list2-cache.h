@@ -21,8 +21,8 @@ struct cache_data {
 		  cand1count:2;
 };
 
-static inline void restore_blk_order(const struct cache_data cache,
-				     char data[static PAGE_SIZE])
+static inline void uncache_pg(const struct cache_data cache,
+			      char data[static PAGE_SIZE])
 {
 	const _Bool min_loc = cache.cur1 < cache.cur0;
 	const size_type cached[] = {cache.cur0 * BLOCK_SIZE,
@@ -52,10 +52,9 @@ static inline void restore_blk_order(const struct cache_data cache,
 	memcpy(data + count, max_data, BLOCK_SIZE);
 }
 
-static inline void get_ordered_blks(const struct cache_data cache,
-				    struct range byte,
-				    const char src[static PAGE_SIZE],
-				    char dest[static BLOCK_SIZE])
+static inline void cache_read(const struct cache_data cache, struct range byte,
+			      const char src[static PAGE_SIZE],
+			      char dest[static BLOCK_SIZE])
 {
 	_Bool min_loc = cache.cur1 < cache.cur0;
 	const size_type cached[] = {cache.cur0 * BLOCK_SIZE,
@@ -86,8 +85,8 @@ static inline void get_ordered_blks(const struct cache_data cache,
 	}
 }
 
-static inline size_type decompr_byte_count(const struct cache_data cache,
-					   const struct range blk)
+static inline size_type bytes_needed(const struct cache_data cache,
+				     const struct range blk)
 {
 	if (blk.count <= 2) {
 		unsigned char found    = 0,
@@ -106,7 +105,7 @@ static inline size_type decompr_byte_count(const struct cache_data cache,
 }
 
 #define LOG_READ2
-static inline void log_read(struct cache_data *cache, struct range blk)
+static inline void cache_log_read(struct cache_data *cache, struct range blk)
 {
 #ifdef LOG_READ1
 	unsigned char counts[] = {cache->cand0count, cache->cand1count};
@@ -234,39 +233,40 @@ static inline void log_read(struct cache_data *cache, struct range blk)
 	cache->cand1count = counts[1];
 }
 
-static inline void update_cache(struct cache_data *cache,
-				char data[static PAGE_SIZE])
+static inline void cache_pg(struct cache_data *cache,
+			    char data[static PAGE_SIZE])
 {
 	char copy[PAGE_SIZE];
 	memcpy(copy, data, PAGE_SIZE);
 	const _Bool min_loc = cache->next1 < cache->next0;
 	const size_type cached[] = {cache->next0 * BLOCK_SIZE,
 				    cache->next1 * BLOCK_SIZE};
-	get_ordered_blks(*cache, RNG(0, cached[min_loc]), copy,
-			 data + 2 * BLOCK_SIZE);
-	get_ordered_blks(*cache, RNG(cached[min_loc], BLOCK_SIZE), copy,
-			 data + BLOCK_SIZE * min_loc);
+	cache_read(*cache, RNG(0, cached[min_loc]), copy,
+		   data + 2 * BLOCK_SIZE);
+	cache_read(*cache, RNG(cached[min_loc], BLOCK_SIZE), copy,
+		   data + BLOCK_SIZE * min_loc);
 	size_type next = cached[min_loc] + BLOCK_SIZE;
-	get_ordered_blks(*cache, RNG(next, cached[!min_loc] - next),
-			 copy, data + 2 * BLOCK_SIZE + cached[min_loc]);
-	get_ordered_blks(*cache, RNG(cached[!min_loc], BLOCK_SIZE), copy,
-			 data + BLOCK_SIZE * !min_loc);
+	cache_read(*cache, RNG(next, cached[!min_loc] - next),
+		   copy, data + 2 * BLOCK_SIZE + cached[min_loc]);
+	cache_read(*cache, RNG(cached[!min_loc], BLOCK_SIZE), copy,
+		   data + BLOCK_SIZE * !min_loc);
 	next = cached[!min_loc] + BLOCK_SIZE;
-	get_ordered_blks(*cache, RNG(next, PAGE_SIZE - next),
-			 copy, data + BLOCK_SIZE + cached[!min_loc]);
+	cache_read(*cache, RNG(next, PAGE_SIZE - next),
+		   copy, data + BLOCK_SIZE + cached[!min_loc]);
 	cache->cur0 = cache->next0;
 	cache->cur1 = cache->next1;
 }
 
-static inline void init_cache(struct cache_data *cache)
+static inline void cache_init(struct cache_data *cache)
 {
-	cache->cur1 = 1;
+	cache->cur1  = 1;
+	cache->next1 = 1;
 }
 
-static inline void reset_cache(struct cache_data *cache)
+static inline void cache_reset(struct cache_data *cache)
 {
 	memset(cache, 0, sizeof *cache);
-	init_cache(cache);
+	cache_init(cache);
 }
 
 
