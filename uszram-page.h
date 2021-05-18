@@ -14,6 +14,7 @@
 #  include "compressors/uszram-zapi-def.h"
 #endif
 
+#include "cache-api.h"
 #ifdef USZRAM_LIST2_CACHE
 #  include "caches/list2-cache.h"
 #endif

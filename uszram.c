@@ -176,7 +176,9 @@ static size_type write_pg(const PgLoop *l, uint_least32_t pg_addr,
 {
 	struct page *pg = pgtbl + pg_addr;
 	struct lock *lk = lktbl + l->lk_addr;
+#ifndef USZRAM_NO_CACHING
 	char copy[PAGE_SIZE];
+#endif
 
 	lock_as_writer(lk);
 	CACHE_PG_COPY(pg, data, copy);
@@ -331,6 +333,8 @@ int uszram_init(void)
 		return -1;
 	for (uint_least64_t i = 0; i != LOCK_COUNT; ++i)
 		initialize_lock(lktbl + i);
+	for (uint_least64_t i = 0; i != USZRAM_PAGE_COUNT; ++i)
+		CACHE_INIT(pgtbl + i);
 	initialized = 1;
 	return 0;
 }
