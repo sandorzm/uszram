@@ -19,4 +19,6 @@ caching strategies are documented in `*-api.h` for purposes of extending uszram.
 `uszram.c` is the only translation unit needed to compile the uszram library. To
 build performance tests, compile it along with `test/workload.c` and
 `test/test-utils.c`. Follow the separate instructions for linking in your chosen
-compression library.
+compression library. The code has been tested with version
+[2e6f1f](https://github.com/Mjdgithuber/Z_API/commit/2e6f1fc0ad48bcb42b0638e14fae3f8c8d3dadaa)
+of Z API.
