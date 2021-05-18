@@ -49,38 +49,56 @@ static inline _Bool needs_recompress(struct page *pg, size_type blocks)
 	return 0;
 }
 
-static int read_helper(const struct page *pg, struct range blk,
-		       const char *new_data, char raw_pg[static PAGE_SIZE])
+static inline int read_helper(const struct page *pg,
+			      unsigned char range_count,
+			      const BlkRange *ranges,
+			      char raw_pg[static PAGE_SIZE],
+			      const char *new_data)
 {
-	const struct range byte = {
-		.offset = blk.offset * BLOCK_SIZE,
-		.count  = blk.count  * BLOCK_SIZE,
-	};
-	const int ret = decompress(
-		pg,
-		byte.offset + byte.count == PAGE_SIZE ? byte.offset : PAGE_SIZE,
-		raw_pg);
+	int ret = decompress(pg, PAGE_SIZE, raw_pg);
 	if (ret)
 		return ret;
-	if (new_data)
-		memcpy(raw_pg + byte.offset, new_data, byte.count);
-	else
-		memset(raw_pg + byte.offset, 0, byte.count);
+	for (unsigned char i = 0; i < range_count; ++i) {
+		const size_type offset = ranges[i].offset * BLOCK_SIZE,
+				count  = ranges[i].count  * BLOCK_SIZE;
+		memcpy(raw_pg + offset, new_data, count);
+		new_data += count;
+	}
 	return 1;
 }
 
-static inline int read_modify(const struct page *pg, struct range blk,
-			      const char *new_data, const char *orig,
-			      char raw_pg[static PAGE_SIZE])
+static inline int read_modify(const struct page *pg,
+			      unsigned char range_count,
+			      const BlkRange *ranges,
+			      char raw_pg[static PAGE_SIZE],
+			      const char *new_data)
 {
-	(void)orig;
-	return read_helper(pg, blk, new_data, raw_pg);
+	return read_helper(pg, range_count, ranges, raw_pg, new_data);
 }
 
-static inline int read_delete(const struct page *pg, struct range blk,
+static inline int read_modify_hint(const struct page *pg,
+				   unsigned char range_count,
+				   const BlkRange *ranges,
+				   char raw_pg[static PAGE_SIZE],
+				   const char *new_data,
+				   const char *old_data)
+{
+	(void)old_data;
+	return read_modify(pg, range_count, ranges, raw_pg, new_data);
+}
+
+static inline int read_delete(const struct page *pg,
+			      unsigned char range_count,
+			      const BlkRange *ranges,
 			      char raw_pg[static PAGE_SIZE])
 {
-	return read_helper(pg, blk, NULL, raw_pg);
+	int ret = decompress(pg, PAGE_SIZE, raw_pg);
+	if (ret)
+		return ret;
+	for (unsigned char i = 0; i < range_count; ++i)
+		memset(raw_pg + ranges[i].offset * BLOCK_SIZE, 0,
+		       ranges[i].count * BLOCK_SIZE);
+	return 1;
 }
 
 

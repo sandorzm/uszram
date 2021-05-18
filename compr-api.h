@@ -56,29 +56,43 @@ static inline void write_compressed(struct page *pg, size_type bytes,
  */
 static inline _Bool needs_recompress(struct page *pg, size_type blocks);
 
-/* read_modify() updates blk.count blocks starting at blk.offset blocks from the
- * beginning of pg with new_data. Any error code from decompress() is returned.
- * orig is an optional hint that contains the original, unmodified version of
- * the region of pg to be updated. It may allow skipping decompression.
+/* read_modify() decompresses and updates each range in 'ranges' of pg with data
+ * from new_data. 'ranges' must be disjoint and all fit within a page. If
+ * decompress() fails, the error code is returned.
  *
- * pg must not be huge, new_data must be at least blk.count blocks in size, and
- * the range specified by blk must be within the page size. If orig is non-null,
- * it must also be at least blk.count blocks in size and match the data in pg.
+ * pg must not be huge, 'ranges' must have at least range_count elements, and
+ * new_data must have at least as many blocks of data as the sum of all
+ * ranges[i].count.
  *
  * If pg needs to be recompressed, returns 1 and writes the full raw page to
  * raw_pg. Otherwise, returns 0 or a negative error code, leaving any metadata
  * in pg in a consistent state.
  */
-static inline int read_modify(const struct page *pg, struct range blk,
-			      const char *new_data, const char *orig,
-			      char raw_pg[static PAGE_SIZE]);
+static inline int read_modify(const struct page *pg,
+			      unsigned char range_count,
+			      const BlkRange *ranges,
+			      char raw_pg[static PAGE_SIZE],
+			      const char *new_data);
+
+/* read_modify_hint() is like read_modify() but accepts the parameter old_data,
+ * a hint that must contain the original, unmodified versions of the regions of
+ * pg to be updated (i.e., the original version of new_data). It may allow
+ * skipping decompression.
+ */
+static inline int read_modify_hint(const struct page *pg,
+				   unsigned char range_count,
+				   const BlkRange *ranges,
+				   char raw_pg[static PAGE_SIZE],
+				   const char *new_data,
+				   const char *old_data);
 
 /* read_delete() is like read_modify() except that it sets the blocks to zero
- * instead of new_data, it takes no hint, and a return value of 0 means that pg
- * is now empty (all zeros) and can be deallocated. pg always needs to be
- * recompressed.
+ * instead of new data, and a return value of 0 means that pg is now empty (all
+ * zeros) and can be deallocated. pg always needs to be recompressed.
  */
-static inline int read_delete(const struct page *pg, struct range blk,
+static inline int read_delete(const struct page *pg,
+			      unsigned char range_count,
+			      const BlkRange *ranges,
 			      char raw_pg[static PAGE_SIZE]);
 
 

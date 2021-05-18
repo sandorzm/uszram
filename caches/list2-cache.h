@@ -7,7 +7,8 @@
 #include "../cache-api.h"
 
 
-#define BLKPPG_SHIFT (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)
+#define BLKPPG_SHIFT  (USZRAM_PAGE_SHIFT - USZRAM_BLOCK_SHIFT)
+#define MAX_PG_RANGES 5
 
 
 struct cache_data {
@@ -52,7 +53,7 @@ static inline void uncache_pg(const struct cache_data cache,
 	memcpy(data + count, max_data, BLOCK_SIZE);
 }
 
-static inline void cache_read(const struct cache_data cache, struct range byte,
+static inline void cache_read(const struct cache_data cache, ByteRange byte,
 			      const char src[static PAGE_SIZE],
 			      char dest[static BLOCK_SIZE])
 {
@@ -85,8 +86,60 @@ static inline void cache_read(const struct cache_data cache, struct range byte,
 	}
 }
 
+static inline unsigned char get_pg_ranges(const struct cache_data cache,
+					  BlkRange blk,
+					  BlkRange ret[static MAX_PG_RANGES])
+{
+	_Bool min_loc = cache.cur1 < cache.cur0;
+	const uint_least16_t cached[] = {cache.cur0, cache.cur1};
+	const uint_least16_t offsets[] = {
+		cached[ min_loc],
+		cached[!min_loc],
+		blk.offset + blk.count,
+	};
+	unsigned char ret_pos = 0;
+	for (unsigned char i = 0; i < sizeof offsets / sizeof *offsets; ++i) {
+		if (blk.count == 0)
+			return ret_pos;
+		if (blk.offset <= offsets[i]) {
+			size_type to_next = offsets[i] - blk.offset;
+			const uint_least16_t start = 2 - i + blk.offset;
+			if (to_next >= blk.count) {
+				ret[ret_pos] = BLRNG(start, blk.count);
+				if (ret_pos && ret[ret_pos - 1].offset
+					       + ret[ret_pos - 1].count
+					       == start)
+					ret[ret_pos - 1].count += blk.count;
+				else
+					++ret_pos;
+				return ret_pos;
+			}
+			if (to_next) {
+				ret[ret_pos] = BLRNG(start, to_next);
+				if (ret_pos && ret[ret_pos - 1].offset
+					       + ret[ret_pos - 1].count
+					       == start)
+					ret[ret_pos - 1].count += to_next;
+				else
+					++ret_pos;
+			}
+			ret[ret_pos] = BLRNG(min_loc, 1);
+			if (ret_pos && ret[ret_pos - 1].offset
+				       + ret[ret_pos - 1].count == min_loc)
+				++ret[ret_pos - 1].count;
+			else
+				++ret_pos;
+			++to_next;
+			blk.offset += to_next;
+			blk.count  -= to_next;
+		}
+		min_loc = !min_loc;
+	}
+	return ret_pos;
+}
+
 static inline size_type bytes_needed(const struct cache_data cache,
-				     const struct range blk)
+				     const BlkRange blk)
 {
 	if (blk.count <= 2) {
 		unsigned char found    = 0,
@@ -105,7 +158,7 @@ static inline size_type bytes_needed(const struct cache_data cache,
 }
 
 #define LOG_READ2
-static inline void cache_log_read(struct cache_data *cache, struct range blk)
+static inline void cache_log_read(struct cache_data *cache, BlkRange blk)
 {
 #ifdef LOG_READ1
 	unsigned char counts[] = {cache->cand0count, cache->cand1count};
@@ -233,28 +286,35 @@ static inline void cache_log_read(struct cache_data *cache, struct range blk)
 	cache->cand1count = counts[1];
 }
 
+static inline void cache_pg_copy(struct cache_data *cache,
+				 const char src[static PAGE_SIZE],
+				 char dest[static PAGE_SIZE])
+{
+	const _Bool min_loc = cache->next1 < cache->next0;
+	const size_type cached[] = {cache->next0 * BLOCK_SIZE,
+				    cache->next1 * BLOCK_SIZE};
+	cache_read(*cache, BYRNG(0, cached[min_loc]), src,
+		   dest + 2 * BLOCK_SIZE);
+	cache_read(*cache, BYRNG(cached[min_loc], BLOCK_SIZE), src,
+		   dest + BLOCK_SIZE * min_loc);
+	size_type next = cached[min_loc] + BLOCK_SIZE;
+	cache_read(*cache, BYRNG(next, cached[!min_loc] - next),
+		   src, dest + 2 * BLOCK_SIZE + cached[min_loc]);
+	cache_read(*cache, BYRNG(cached[!min_loc], BLOCK_SIZE), src,
+		   dest + BLOCK_SIZE * !min_loc);
+	next = cached[!min_loc] + BLOCK_SIZE;
+	cache_read(*cache, BYRNG(next, PAGE_SIZE - next),
+		   src, dest + BLOCK_SIZE + cached[!min_loc]);
+	cache->cur0 = cache->next0;
+	cache->cur1 = cache->next1;
+}
+
 static inline void cache_pg(struct cache_data *cache,
 			    char data[static PAGE_SIZE])
 {
 	char copy[PAGE_SIZE];
 	memcpy(copy, data, PAGE_SIZE);
-	const _Bool min_loc = cache->next1 < cache->next0;
-	const size_type cached[] = {cache->next0 * BLOCK_SIZE,
-				    cache->next1 * BLOCK_SIZE};
-	cache_read(*cache, RNG(0, cached[min_loc]), copy,
-		   data + 2 * BLOCK_SIZE);
-	cache_read(*cache, RNG(cached[min_loc], BLOCK_SIZE), copy,
-		   data + BLOCK_SIZE * min_loc);
-	size_type next = cached[min_loc] + BLOCK_SIZE;
-	cache_read(*cache, RNG(next, cached[!min_loc] - next),
-		   copy, data + 2 * BLOCK_SIZE + cached[min_loc]);
-	cache_read(*cache, RNG(cached[!min_loc], BLOCK_SIZE), copy,
-		   data + BLOCK_SIZE * !min_loc);
-	next = cached[!min_loc] + BLOCK_SIZE;
-	cache_read(*cache, RNG(next, PAGE_SIZE - next),
-		   copy, data + BLOCK_SIZE + cached[!min_loc]);
-	cache->cur0 = cache->next0;
-	cache->cur1 = cache->next1;
+	cache_pg_copy(cache, copy, data);
 }
 
 static inline void cache_init(struct cache_data *cache)

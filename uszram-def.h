@@ -13,15 +13,21 @@
    typedef uint_least32_t size_type;
 #endif
 
-/* struct range is for specifying a range of blocks in a page, with offset and
- * count either both in units of blocks or both in units of bytes.
+/* BlkRange and ByteRange specify a range of blocks or bytes in a page,
+ * respectively.
  */
-struct range {
-	size_type  offset,  // Blocks or bytes from the beginning of the page
-		   count;   // Blocks or bytes in the range starting at offset
-};
+typedef struct BlkRange {
+	uint_least16_t  offset, // Of first block from page start, in blocks
+			count;  // In blocks
+} BlkRange;
 
-#define RNG(o, c) (struct range){.offset = (o), .count = (c)}
+typedef struct ByteRange {
+	size_type  offset,      // Same, but both fields in bytes
+		   count;
+} ByteRange;
+
+#define BLRNG(o, c) (BlkRange ){.offset = (o), .count = (c)}
+#define BYRNG(o, c) (ByteRange){.offset = (o), .count = (c)}
 
 #define BLOCK_SIZE    USZRAM_BLOCK_SIZE
 #define PAGE_SIZE     USZRAM_PAGE_SIZE
