@@ -1,3 +1,49 @@
+/* list2-cache.h uses a heuristic to keep two of the most frequently read blocks
+ * at the beginning of each page ("cache" them) so that reading them requires
+ * less decompression. struct cache_data is a list of six block offsets that
+ * stores all relevant information. The blocks are rearranged to put the cached
+ * ones at the beginning whenever the page is compressed.
+ *
+ * The six block offsets are the two that are currently cached (cur0, cur1), the
+ * two that will be cached on the next recompression (next0, next1), and two
+ * candidates that may replace the next blocks if read frequently enough (cand0,
+ * cand1). The next and cand pairs are ordered by recency: next0 is more recent
+ * than next1, and cand0 is more recent than cand1. Thus, whenever a new block
+ * enters the next or cand lists, it goes into next0 or cand0, respectively,
+ * displacing what was there previously. And when next1 or cand1 is read, it is
+ * swapped with next0 or cand0, respectively.
+ *
+ * When uszram starts up, the struct is initialized to {.cur0 = 0, .cur1 = 1,
+ * .next0 = 0, .next1 = 1}, with everything else zero. This represents that the
+ * page is in its natural order and will stay that way on the next
+ * recompression. When a block is read, it goes into cand0, and if the block
+ * equals cur1 (1 in this case), next0 and next1 are swapped to maintain recency
+ * order. When another, different block is read, it goes into cand0 again,
+ * moving the value of cand0 to cand1. (Same as before if the block is cur1.)
+ * When the next new block is read, cand1 is kicked out, and so on. As long as
+ * new blocks not already in cand keep being read, they just cycle through, with
+ * cand containing the two most recent ones.
+ *
+ * However, if a block already in cand is read, and then again before both next
+ * blocks are read, it is promoted to next. When it enters cand as cand0, it
+ * gets a two-bit counter cand0count that starts at 00. If it's still in cand
+ * the next time it's read, the two cands swap and the two counts swap if the
+ * block got demoted to cand1, and cand0count becomes 11 (binary). Now, we see
+ * which comes first: the candidate is read again, or both next blocks are read.
+ * So if next0 is read, bit 1 of the counter is cleared (&= 1), and if next1 is
+ * read, bit 0 is cleared, and then the two nexts swap and the two bits of the
+ * counter swap (counter >>= 1 does all of this). When the candidate is read
+ * again, check its counter: if it's zero, both next blocks were read;
+ * otherwise, promote the candidate. Which next block does it replace? The one
+ * that wasn't read and didn't clear its bit of the counter. (If neither
+ * next block was read, one is chosen arbitrarily.) If it replaces next1, the
+ * two nexts are swapped, because the promoted candidate was just read.
+ *
+ * With this scheme, if just one next block falls out of use, it is quickly
+ * replaced, provided there is a better candidate. Likewise if both next blocks
+ * fall out of use.
+ */
+
 #ifndef LIST2_CACHE_H
 #define LIST2_CACHE_H
 

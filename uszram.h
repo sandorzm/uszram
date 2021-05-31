@@ -54,9 +54,13 @@
  * deemed worth the overhead). USZRAM_MAX_NHUGE_PERCENT must be an integer at
  * least 100.0 / USZRAM_PAGE_SIZE and at most 100.
  *
- * uszram allows huge pages to accumulate USZRAM_HUGE_WAIT block updates before
- * compressing them again (so it doesn't waste too much time compressing
- * incompressible data). USZRAM_HUGE_WAIT must be at least 1 and at most 64.
+ * If a page is incompressible (stored as raw data), you might expect uszram to
+ * try to recompress it every time it's updated, but these recompressions are
+ * wasteful because they're likely to fail if the updates are small. So instead
+ * of recompressing on every update, we only do it every USZRAM_HUGE_WAIT
+ * updates, where each block included in a write_block() call counts as an
+ * update for the page it's in. Writing the whole page always triggers
+ * recompression. USZRAM_HUGE_WAIT must be at least 1 and at most 64.
  */
 #define USZRAM_MAX_NHUGE_PERCENT 75u
 #define USZRAM_HUGE_WAIT         64u
